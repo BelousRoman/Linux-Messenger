@@ -17,6 +17,8 @@
 
 #define SRV_PORT            8888
 
+#define DEFAULT_NAME        "user"
+#define DEFAULT_ID          0
 #define DEFAULT_LANGUAGE    LANGUAGE_ENGLISH
 #define DEFAULT_IP_ADDR     LOCAL_IP_ADDR
 #define DEFAULT_PORT        SRV_PORT
@@ -43,6 +45,7 @@ struct config_t
     char ip[16];
     unsigned short port;
     char name[20];
+    int id;
 };
 
 extern struct config_t config;

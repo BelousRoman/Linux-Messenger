@@ -104,6 +104,8 @@ int form_default_json(void)
     json = cJSON_CreateObject();
     if (json != NULL)
     {
+        ret += AddOrModifyEntry("username", TYPE_STRING, DEFAULT_NAME);
+        ret += AddOrModifyEntry("id", TYPE_INT, (void *)DEFAULT_ID);
         ret += AddOrModifyEntry("language", TYPE_STRING, DEFAULT_LANGUAGE);
         ret += AddOrModifyEntry("server_ip", TYPE_STRING, DEFAULT_IP_ADDR);
         ret += AddOrModifyEntry("server_port", TYPE_INT, (void *)DEFAULT_PORT);
