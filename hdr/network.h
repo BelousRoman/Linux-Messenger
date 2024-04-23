@@ -31,7 +31,7 @@ enum client_types
 
 enum commands
 {
-    PING_COMM = 0,
+    PING_COMM = 1,
     CONNECT_COMM,
     JOIN_COMM,
     CREATE_COMM,
@@ -52,7 +52,6 @@ enum answers
     DISCONNECT_ANSW,
     CLIENT_QUIT_ANSW,
     SHUT_ROOM_ANSW,
-    SHUT_SRV_ANSW,
     ERROR_ANSW
 };
 
@@ -104,8 +103,9 @@ int main_server();
 
 int connect_to_main_server();
 int check_connection_to_main_server();
+int get_latency();
 int client_send(int comm, int wait_flag, ...);
-int client_recv(int comm, int wait_flag, ...);
+int client_recv(int comm);
 int disconnect_from_main_server();
 
 int connect_to_chat_server();

@@ -5,7 +5,10 @@ struct server_info_t server_info;
 
 struct sockaddr_in server;
 int server_fd;
-int delayMcs;
+
+struct timeval start_tv = {NULL,NULL};
+struct timeval end_tv = {NULL,NULL};
+int delayMcs = NULL;
 
 int connect_to_main_server()
 {
@@ -74,22 +77,30 @@ int connect_to_main_server()
 
 int check_connection_to_main_server()
 {
+    int ret = EXIT_SUCCESS;
+    
     if (server_fd > 0)
     {
-        // send(server_fd, )
+        ret = client_send(PING_COMM, NET_WAIT_TRUE);
     }
     else
+        ret = EXIT_FAILURE;
+
+    return ret;
+}
+
+int get_latency()
+{
+    if (delayMcs == NULL && client_send(PING_COMM, NET_WAIT_TRUE) == EXIT_FAILURE)
         return EXIT_FAILURE;
 
-    return EXIT_SUCCESS;
+    return delayMcs;
 }
 
 int client_send(int comm, int wait_flag, ...)
 {
     struct client_msg_t msg;
     va_list ap;
-    struct timeval start_tv;
-    struct timeval end_tv;
     int ret = EXIT_SUCCESS;
 
     va_start(ap, wait_flag);
@@ -244,90 +255,7 @@ int client_send(int comm, int wait_flag, ...)
 
         if (wait_flag == NET_WAIT_TRUE)
         {
-            memset(&msg, NULL, sizeof(msg));
-
-            if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
-            {
-                printf("recv: %s(%d)\n", strerror(errno), errno);
-                ret = EXIT_FAILURE;
-            }
-            else
-            {
-                switch (msg.command)
-                {
-                case PING_ANSW:
-                    int *latencyMcs = va_arg(ap, int *);
-                    printf("latencyMcs(%ld) = <%d>(%ld)\n", &latencyMcs, *latencyMcs, latencyMcs);
-
-                    if (start_tv.tv_sec != NULL)
-                    {
-                        if (gettimeofday(&end_tv, NULL) == -1)
-                        {
-                            printf("gettimeofday: %s(%d)\n", strerror(errno), errno);
-                            ret = EXIT_FAILURE;
-                            break;
-                        }
-                        else
-                        {
-                            int startMcs, endMcs;
-                            startMcs = start_tv.tv_sec * (int)1e6 + start_tv.tv_usec;
-                            endMcs = end_tv.tv_sec * (int)1e6 + end_tv.tv_usec;
-                            delayMcs = endMcs - startMcs;
-                            *latencyMcs = delayMcs;
-                        }
-                    }
-                    break;
-                case CONNECT_ANSW:
-                    // client_info.client_name = msg.client_info.client_name;
-                    strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-                    client_info.client_type = msg.client_info.client_type;
-                    client_info.cur_server = msg.client_info.cur_server;
-                    client_info.id = msg.client_info.id;
-                    break;
-                case JOIN_ANSW:
-                    // client_info.client_name = msg.client_info.client_name;
-                    strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-                    client_info.client_type = msg.client_info.client_type;
-                    client_info.cur_server = msg.client_info.cur_server;
-                    client_info.id = msg.client_info.id;
-                    break;
-                case CREATE_ANSW:
-                    server_info.host_id = msg.server_info.host_id;
-                    // server_info.server_name = msg.server_info.server_name;
-                    strncpy(server_info.server_name, msg.server_info.server_name, sizeof(server_info.server_name));
-                    // server_info.ip = msg.server_info.ip;
-                    strncpy(server_info.ip, msg.server_info.ip, sizeof(server_info.ip));
-                    server_info.port = msg.server_info.port;
-                    break;
-                case RENAME_ANSW:
-                    // client_info.client_name = msg.client_info.client_name;
-                    strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-                    client_info.client_type = msg.client_info.client_type;
-                    client_info.cur_server = msg.client_info.cur_server;
-                    client_info.id = msg.client_info.id;
-                    break;
-                case DISCONNECT_ANSW:
-                    break;
-                case CLIENT_QUIT_ANSW:
-                    break;
-                case SHUT_ROOM_ANSW:
-                    // client_info.client_name = msg.client_info.client_name;
-                    strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-                    client_info.client_type = msg.client_info.client_type;
-                    client_info.cur_server = msg.client_info.cur_server;
-                    client_info.id = msg.client_info.id;
-                    break;
-                case SHUT_SRV_ANSW:
-                    disconnect_from_main_server();
-                    break;
-                case ERROR_ANSW:
-
-                    break;
-                default:
-                    ret = EXIT_FAILURE;
-                    break;
-                }
-            }
+            ret = client_recv(comm);
         }
     }
 
@@ -336,102 +264,138 @@ int client_send(int comm, int wait_flag, ...)
     return ret;
 }
 
-int client_recv(int comm, ...)
+int client_recv(int comm)
 {
     struct client_msg_t msg;
-    va_list ap;
     int ret = EXIT_SUCCESS;
 
-    va_start(ap, comm);
-
     memset(&msg, NULL, sizeof(msg));
+
+    if (server_fd <= 0)
+    {
+        ret = EXIT_FAILURE;
+        return ret;
+    }
 
     if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
     {
         printf("recv: %s(%d)\n", strerror(errno), errno);
         ret = EXIT_FAILURE;
+        return ret;
     }
-    else
+    
+    switch (msg.command)
     {
-        switch (msg.command)
+    case PING_ANSW:
+        if (comm != NULL && comm != PING_COMM)
         {
-        case PING_ANSW:
-            struct timeval *start_tv = va_arg(ap, struct timeval *);
-            struct timeval *end_tv = va_arg(ap, struct timeval *);
-            int *latencyMcs = va_arg(ap, int *);
-            printf("latencyMcs(%ld) = <%d>(%ld)\n", &latencyMcs, *latencyMcs, latencyMcs);
-
-            if (start_tv->tv_sec != NULL)
-            {
-                if (gettimeofday(end_tv, NULL) == -1)
-                {
-                    printf("gettimeofday: %s(%d)\n", strerror(errno), errno);
-                    ret = EXIT_FAILURE;
-                    break;
-                }
-                else
-                {
-                    int startMcs, endMcs;
-                    startMcs = start_tv->tv_sec * (int)1e6 + start_tv->tv_usec;
-                    endMcs = end_tv->tv_sec * (int)1e6 + end_tv->tv_usec;
-                    delayMcs = endMcs - startMcs;
-                    *latencyMcs = delayMcs;
-                }
-            }
-            break;
-        case CONNECT_ANSW:
-            // client_info.client_name = msg.client_info.client_name;
-            strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-            client_info.client_type = msg.client_info.client_type;
-            client_info.cur_server = msg.client_info.cur_server;
-            client_info.id = msg.client_info.id;
-            break;
-        case JOIN_ANSW:
-            // client_info.client_name = msg.client_info.client_name;
-            strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-            client_info.client_type = msg.client_info.client_type;
-            client_info.cur_server = msg.client_info.cur_server;
-            client_info.id = msg.client_info.id;
-            break;
-        case CREATE_ANSW:
-            server_info.host_id = msg.server_info.host_id;
-            // server_info.server_name = msg.server_info.server_name;
-            strncpy(server_info.server_name, msg.server_info.server_name, sizeof(server_info.server_name));
-            // server_info.ip = msg.server_info.ip;
-            strncpy(server_info.ip, msg.server_info.ip, sizeof(server_info.ip));
-            server_info.port = msg.server_info.port;
-            break;
-        case RENAME_ANSW:
-            // client_info.client_name = msg.client_info.client_name;
-            strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-            client_info.client_type = msg.client_info.client_type;
-            client_info.cur_server = msg.client_info.cur_server;
-            client_info.id = msg.client_info.id;
-            break;
-        case DISCONNECT_ANSW:
-            break;
-        case CLIENT_QUIT_ANSW:
-            break;
-        case SHUT_ROOM_ANSW:
-            // client_info.client_name = msg.client_info.client_name;
-            strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
-            client_info.client_type = msg.client_info.client_type;
-            client_info.cur_server = msg.client_info.cur_server;
-            client_info.id = msg.client_info.id;
-            break;
-        case SHUT_SRV_ANSW:
-            disconnect_from_main_server();
-            break;
-        case ERROR_ANSW:
-
-            break;
-        default:
             ret = EXIT_FAILURE;
             break;
         }
-    }
 
-    va_end(ap);
+        if (start_tv.tv_sec != NULL)
+        {
+            if (gettimeofday(&end_tv, NULL) == -1)
+            {
+                printf("gettimeofday: %s(%d)\n", strerror(errno), errno);
+                ret = EXIT_FAILURE;
+                break;
+            }
+
+            int startMcs, endMcs;
+            startMcs = start_tv.tv_sec * (int)1e6 + start_tv.tv_usec;
+            endMcs = end_tv.tv_sec * (int)1e6 + end_tv.tv_usec;
+            delayMcs = endMcs - startMcs;
+        }
+        break;
+    case CONNECT_ANSW:
+        if (comm != NULL && comm != CONNECT_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+
+        // client_info.client_name = msg.client_info.client_name;
+        strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
+        client_info.client_type = msg.client_info.client_type;
+        client_info.cur_server = msg.client_info.cur_server;
+        client_info.id = msg.client_info.id;
+        break;
+    case JOIN_ANSW:
+        if (comm != NULL && comm != JOIN_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+
+        // client_info.client_name = msg.client_info.client_name;
+        strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
+        client_info.client_type = msg.client_info.client_type;
+        client_info.cur_server = msg.client_info.cur_server;
+        client_info.id = msg.client_info.id;
+        break;
+    case CREATE_ANSW:
+        if (comm != NULL && comm != CREATE_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+
+        server_info.host_id = msg.server_info.host_id;
+        // server_info.server_name = msg.server_info.server_name;
+        strncpy(server_info.server_name, msg.server_info.server_name, sizeof(server_info.server_name));
+        // server_info.ip = msg.server_info.ip;
+        strncpy(server_info.ip, msg.server_info.ip, sizeof(server_info.ip));
+        server_info.port = msg.server_info.port;
+        break;
+    case RENAME_ANSW:
+        if (comm != NULL && comm != RENAME_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+        // client_info.client_name = msg.client_info.client_name;
+        strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
+        client_info.client_type = msg.client_info.client_type;
+        client_info.cur_server = msg.client_info.cur_server;
+        client_info.id = msg.client_info.id;
+        break;
+    case DISCONNECT_ANSW:
+        if (comm != NULL && comm != DISCONNECT_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+        break;
+    case CLIENT_QUIT_ANSW:
+        if (comm != NULL && comm != CLIENT_QUIT_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+        break;
+    case SHUT_ROOM_ANSW:
+        if (comm != NULL && comm != SHUT_ROOM_COMM)
+        {
+            ret = EXIT_FAILURE;
+            break;
+        }
+        // client_info.client_name = msg.client_info.client_name;
+        strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
+        client_info.client_type = msg.client_info.client_type;
+        client_info.cur_server = msg.client_info.cur_server;
+        client_info.id = msg.client_info.id;
+        break;
+    case SHUT_SRV_COMM:
+        disconnect_from_main_server();
+        break;
+    case ERROR_ANSW:
+
+        break;
+    default:
+        ret = EXIT_FAILURE;
+        break;
+    }
 
     return ret;
 }

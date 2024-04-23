@@ -4,7 +4,7 @@ int main_server()
 {
     int server_fd;
     struct sockaddr_in server;
-    int tmp_fd;
+    int tmp_fd = 0;
     int *client_fds = NULL;
     int fds_len = MAIN_SERVER_LISTEN_BACKLOG;
     struct sockaddr_in client;
@@ -47,6 +47,7 @@ int main_server()
 			exit(EXIT_FAILURE);
 		}
 
+        printf("accepting %d\n", tmp_fd);
         client_size = sizeof(client);
 		if ((tmp_fd = accept(server_fd, (struct sockaddr *)&client,
 								&client_size)) == -1)
@@ -54,6 +55,12 @@ int main_server()
             printf("accept: %s(%d)\n", strerror(errno), errno);
 			exit(EXIT_FAILURE);
 		}
+
+        printf("accepted %d\n", tmp_fd);
+
+        sleep(15);
+
+        printf("2 Client fd = %d\n", tmp_fd);
     }
     else
     {
@@ -65,12 +72,6 @@ int main_server()
     {
         free(client_fds);
     }
-
-    printf("1 Client fd = %d\n", tmp_fd);
-
-    sleep(15);
-
-    printf("2 Client fd = %d\n", tmp_fd);
 
     return ret;
 }
