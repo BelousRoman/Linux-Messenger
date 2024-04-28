@@ -11,30 +11,37 @@ int main(void)
     setlocale (LC_ALL, "");
 
     read_config();
-    init_graphics();
+    // init_graphics();
 
-    while(ret > 0)
+    if (connect_to_main_server() == EXIT_SUCCESS)
     {
-        switch (ret = menu_wnd())
-        {
-            case 1:
-                ret = join_srv_wnd();
-                break;
-            case 2:
-                ret = create_srv_wnd();
-                break;
-            case 3:
-                ret = prefs_wnd();
-                break;
-            case -1:
-                /* code */
-                break;
-            default:
-                break;
-        }
+        // while(ret > 0)
+        // {
+        //     switch (ret = menu_wnd())
+        //     {
+        //         case 1:
+        //             ret = join_srv_wnd();
+        //             break;
+        //         case 2:
+        //             ret = create_srv_wnd();
+        //             break;
+        //         case 3:
+        //             ret = prefs_wnd();
+        //             break;
+        //         case -1:
+        //             /* code */
+        //             break;
+        //         default:
+        //             break;
+        //     }
+        // }
     }
 
-    deinit_graphics();
+    client_send(JOIN_COMM, NET_WAIT_FALSE);
+
+    disconnect_from_main_server();
+
+    // deinit_graphics();
 
     return 0;
 }

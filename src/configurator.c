@@ -47,6 +47,13 @@ int read_config()
     }
     else
     {
+        char buf[4097];
+        memset(buf, NULL, 4097);
+        fread(buf, sizeof(char), 4096, config_file);
+        // printf("Read %ld bytes: <%s>\n", fread(buf, sizeof(char), 4096, config_file), buf);
+
+        json = cJSON_Parse(buf);
+
         cJSON *language = cJSON_GetObjectItemCaseSensitive(json, "language"); 
         if (cJSON_IsString(language) && (language->valuestring != NULL))
         {
@@ -58,23 +65,42 @@ int read_config()
             {
                 config.language = LANG_RU;
             }
+            // printf("Language: %s(%d)\n", language->valuestring, config.language);
+        }
+
+        cJSON *username = cJSON_GetObjectItemCaseSensitive(json, "username"); 
+        if (cJSON_IsString(username) && (username->valuestring != NULL))
+        {
+            // printf("Username: %s\n", username->valuestring);
+            strncpy(config.name, username->valuestring, sizeof(config.name));
+        }
+
+        cJSON *id = cJSON_GetObjectItemCaseSensitive(json, "id"); 
+        if (cJSON_IsNumber(id))
+        {
+            // printf("User ID %d\n", id->valueint);
+            config.id = id->valueint;
         }
 
         cJSON *ip = cJSON_GetObjectItemCaseSensitive(json, "server_ip"); 
         if (cJSON_IsString(ip) && (ip->valuestring != NULL))
         {
+            // printf("Server ip: %s\n", ip->valuestring);
             strncpy(config.ip, ip->valuestring, sizeof(config.ip));
         }
 
         cJSON *port = cJSON_GetObjectItemCaseSensitive(json, "server_port"); 
-        if (cJSON_IsNumber(port) && (port->valueint != NULL))
+        if (cJSON_IsNumber(port))
         {
+            // printf("Server port: %d\n", port->valueint);
             config.port = port->valueint;
         }
     }
 
     if (config_file != NULL)
         fclose(config_file);
+
+    // printf("%s server addr: %s : %d\n", __func__, config.ip, config.port);
 
     return ret;
 }
@@ -109,6 +135,12 @@ int form_default_json(void)
         ret += AddOrModifyEntry("language", TYPE_STRING, DEFAULT_LANGUAGE);
         ret += AddOrModifyEntry("server_ip", TYPE_STRING, DEFAULT_IP_ADDR);
         ret += AddOrModifyEntry("server_port", TYPE_INT, (void *)DEFAULT_PORT);
+
+        config.id = DEFAULT_ID;
+        strncpy(config.ip, DEFAULT_IP_ADDR, sizeof(config.ip));
+        config.language = LANG_EN;
+        strncpy(config.name, DEFAULT_NAME, sizeof(config.name));
+        config.port = DEFAULT_PORT;
     }
     else
         ret = 1;

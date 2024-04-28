@@ -15,7 +15,7 @@
 #define LOCAL_IP_ADDR       "127.0.0.1"
 #define PUBLIC_IP_ADDR      "192.168.0.11"
 
-#define SRV_PORT            8888
+#define SRV_PORT            7889
 
 #define DEFAULT_NAME        "user"
 #define DEFAULT_ID          0

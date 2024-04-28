@@ -34,6 +34,8 @@ int connect_to_main_server()
 	}
 	server.sin_port = config.port;
 
+    printf("Server addr: %s : %d\n", config.ip, config.port);
+
 	/* Create socket */
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0)
@@ -69,6 +71,7 @@ int connect_to_main_server()
 	// 	exit(EXIT_FAILURE);
 	// }
     // sleep(15);
+    client_send(PING_COMM, NET_WAIT_TRUE);
 
     // close(server_fd);
 
