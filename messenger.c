@@ -12,7 +12,7 @@ int main(void)
 
     read_config();
     // init_graphics();
-
+    puts("connecting");
     if (connect_to_main_server() == EXIT_SUCCESS)
     {
         // while(ret > 0)
@@ -36,9 +36,9 @@ int main(void)
         //     }
         // }
     }
-
+    puts("joining");
     client_send(JOIN_COMM, NET_WAIT_FALSE);
-
+    puts("disconnecting");
     disconnect_from_main_server();
 
     // deinit_graphics();

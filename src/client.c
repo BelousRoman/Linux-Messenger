@@ -4,7 +4,7 @@ struct client_info_t client_info;
 struct server_info_t server_info;
 
 struct sockaddr_in server;
-int server_fd;
+int server_fd = NULL;
 
 struct timeval start_tv = {NULL,NULL};
 struct timeval end_tv = {NULL,NULL};
@@ -71,6 +71,7 @@ int connect_to_main_server()
 	// 	exit(EXIT_FAILURE);
 	// }
     // sleep(15);
+    client_recv(NULL);
     client_send(PING_COMM, NET_WAIT_TRUE);
 
     // close(server_fd);
@@ -102,6 +103,8 @@ int get_latency()
 
 int client_send(int comm, int wait_flag, ...)
 {
+    printf("%s\n", __func__);
+
     struct client_msg_t msg;
     va_list ap;
     int ret = EXIT_SUCCESS;
@@ -269,6 +272,7 @@ int client_send(int comm, int wait_flag, ...)
 
 int client_recv(int comm)
 {
+    printf("%s %d\n", __func__, comm);
     struct client_msg_t msg;
     int ret = EXIT_SUCCESS;
 
@@ -286,6 +290,8 @@ int client_recv(int comm)
         ret = EXIT_FAILURE;
         return ret;
     }
+
+    printf("Comm received: %d\n", msg.command);
     
     switch (msg.command)
     {
@@ -405,8 +411,12 @@ int client_recv(int comm)
 
 int disconnect_from_main_server()
 {
+    int ret = EXIT_SUCCESS;
+
+    ret = client_send(DISCONNECT_COMM, NET_WAIT_TRUE);
+
     if (server_fd > 0)
         close(server_fd);
 
-    return EXIT_SUCCESS;
+    return ret;
 }
