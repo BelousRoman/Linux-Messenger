@@ -36,8 +36,11 @@ int main(void)
         //     }
         // }
     }
+    ret = get_latency();
+    printf("Latency = %d mcs\n", ret);
     puts("joining");
-    client_send(JOIN_COMM, NET_WAIT_FALSE);
+    ret = client_send(JOIN_COMM, NET_WAIT_FALSE, "255.255.255.255", 25519);
+    printf("ret = %d\n", ret);
     puts("disconnecting");
     disconnect_from_main_server();
 

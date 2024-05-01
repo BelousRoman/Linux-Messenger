@@ -5,7 +5,7 @@ SOURCES := src/*.c libs/*.c
 CC := gcc #-Wall
 CFLAGS := -g
 OFLAGS := -c
-LIBS := -lcurses
+LIBS := -lcurses -lrt -pthread
 # $(pkg-config ncursesw --libs --cflags)
 
 all: app srv

@@ -71,8 +71,8 @@ int connect_to_main_server()
 	// 	exit(EXIT_FAILURE);
 	// }
     // sleep(15);
-    client_recv(NULL);
-    client_send(PING_COMM, NET_WAIT_TRUE);
+    // client_recv(NULL);
+    client_send(CONNECT_COMM, NET_WAIT_TRUE);
 
     // close(server_fd);
 
@@ -141,9 +141,9 @@ int client_send(int comm, int wait_flag, ...)
         if (client_info.id != NULL)
         {
             char * ip = va_arg(ap, char *);
-            printf("a(%ld) = <%s>\n", &ip, ip);
-            unsigned short port = va_arg(ap, unsigned short);
-            printf("a(%ld) = <%d>\n", &port, port);
+            // printf("a(%ld) = <%s>\n", &ip, ip);
+            int port = va_arg(ap, int);
+            // printf("a(%ld) = <%d>\n", &port, port);
 
             msg.command = comm;
 
@@ -152,7 +152,7 @@ int client_send(int comm, int wait_flag, ...)
             strncpy(msg.join_srv.client_name, client_info.client_name, sizeof(msg.join_srv.client_name));
             // msg.join_srv.ip = ip;
             strncpy(msg.join_srv.ip, ip, sizeof(msg.join_srv.ip));
-            msg.join_srv.port = port;
+            msg.join_srv.port = (unsigned short)port;
         }
         else
             ret = EXIT_FAILURE;
@@ -324,6 +324,12 @@ int client_recv(int comm)
             break;
         }
 
+        printf("Received info about client:\n\t" \
+        "Name: <%s>\n\t" \
+        "ID: <%d>\n\t" \
+        "Current server: <%d>\n\t" \
+        "CLIENT TYPE: <", msg.client_info.client_name, msg.client_info.id, msg.client_info.cur_server);
+        msg.client_info.client_type == TYPE_USER ? printf("USER>\n") : msg.client_info.client_type == TYPE_SERVER ? printf("SERVER>\n") : printf("NONE>\n");
         // client_info.client_name = msg.client_info.client_name;
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
@@ -414,6 +420,7 @@ int disconnect_from_main_server()
     int ret = EXIT_SUCCESS;
 
     ret = client_send(DISCONNECT_COMM, NET_WAIT_TRUE);
+    printf("%s ret = %d\n", __func__, ret);
 
     if (server_fd > 0)
         close(server_fd);
