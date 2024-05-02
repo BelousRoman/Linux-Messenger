@@ -12,7 +12,7 @@ int main(void)
 
     read_config();
     // init_graphics();
-    puts("connecting");
+
     if (connect_to_main_server() == EXIT_SUCCESS)
     {
         // while(ret > 0)
@@ -38,9 +38,10 @@ int main(void)
     }
     ret = get_latency();
     printf("Latency = %d mcs\n", ret);
-    puts("joining");
+    
     ret = client_send(JOIN_COMM, NET_WAIT_FALSE, "255.255.255.255", 25519);
-    printf("ret = %d\n", ret);
+    ret = client_send(CREATE_COMM, NET_WAIT_FALSE, "SERVERNAME", "127.127.127.127", 24321);
+    ret = client_send(RENAME_COMM, NET_WAIT_FALSE, "NEWUSRNAME");
     puts("disconnecting");
     disconnect_from_main_server();
 

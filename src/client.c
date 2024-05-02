@@ -34,7 +34,7 @@ int connect_to_main_server()
 	}
 	server.sin_port = config.port;
 
-    printf("Server addr: %s : %d\n", config.ip, config.port);
+    // printf("Server addr: %s : %d\n", config.ip, config.port);
 
 	/* Create socket */
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -103,7 +103,7 @@ int get_latency()
 
 int client_send(int comm, int wait_flag, ...)
 {
-    printf("%s\n", __func__);
+    // printf("%s\n", __func__);
 
     struct client_msg_t msg;
     va_list ap;
@@ -161,11 +161,11 @@ int client_send(int comm, int wait_flag, ...)
         if (client_info.id != NULL)
         {
             char * name = va_arg(ap, char *);
-            printf("name(%ld) = <%s>\n", &name, name);
+            // printf("name(%ld) = <%s>\n", &name, name);
             char * ip = va_arg(ap, char *);
-            printf("ip(%ld) = <%s>\n", &ip, ip);
-            unsigned short port = va_arg(ap, unsigned short);
-            printf("port(%ld) = <%d>\n", &port, port);
+            // printf("ip(%ld) = <%s>\n", &ip, ip);
+            int port = va_arg(ap, int);
+            // printf("port(%ld) = <%d>\n", &port, port);
 
             msg.command = comm;
 
@@ -174,7 +174,7 @@ int client_send(int comm, int wait_flag, ...)
             // msg.server_info.ip = ip;
             strncpy(msg.server_info.server_name, name, sizeof(msg.server_info.server_name));
             strncpy(msg.server_info.ip, ip, sizeof(msg.server_info.ip));
-            msg.server_info.port = port;
+            msg.server_info.port = (unsigned short)port;
         }
         else
             ret = EXIT_FAILURE;
@@ -183,7 +183,7 @@ int client_send(int comm, int wait_flag, ...)
         if (client_info.id != NULL)
         {
             char * name = va_arg(ap, char *);
-            printf("name(%ld) = <%s>\n", &name, name);
+            // printf("name(%ld) = <%s>\n", &name, name);
 
             msg.command = comm;
 
@@ -255,7 +255,7 @@ int client_send(int comm, int wait_flag, ...)
     {
         if (send(server_fd, &msg, sizeof(msg), 0) == -1)
         {
-            printf("send: %s(%d)\n", strerror(errno), errno);
+            // printf("send: %s(%d)\n", strerror(errno), errno);
             ret = EXIT_FAILURE;
         }
 
@@ -272,7 +272,7 @@ int client_send(int comm, int wait_flag, ...)
 
 int client_recv(int comm)
 {
-    printf("%s %d\n", __func__, comm);
+    // printf("%s %d\n", __func__, comm);
     struct client_msg_t msg;
     int ret = EXIT_SUCCESS;
 
@@ -286,12 +286,12 @@ int client_recv(int comm)
 
     if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
     {
-        printf("recv: %s(%d)\n", strerror(errno), errno);
+        // printf("recv: %s(%d)\n", strerror(errno), errno);
         ret = EXIT_FAILURE;
         return ret;
     }
 
-    printf("Comm received: %d\n", msg.command);
+    // printf("Comm received: %d\n", msg.command);
     
     switch (msg.command)
     {
@@ -324,12 +324,12 @@ int client_recv(int comm)
             break;
         }
 
-        printf("Received info about client:\n\t" \
-        "Name: <%s>\n\t" \
-        "ID: <%d>\n\t" \
-        "Current server: <%d>\n\t" \
-        "CLIENT TYPE: <", msg.client_info.client_name, msg.client_info.id, msg.client_info.cur_server);
-        msg.client_info.client_type == TYPE_USER ? printf("USER>\n") : msg.client_info.client_type == TYPE_SERVER ? printf("SERVER>\n") : printf("NONE>\n");
+        // printf("Received info about client:\n\t" \
+        // "Name: <%s>\n\t" \
+        // "ID: <%d>\n\t" \
+        // "Current server: <%d>\n\t" \
+        // "CLIENT TYPE: <", msg.client_info.client_name, msg.client_info.id, msg.client_info.cur_server);
+        // msg.client_info.client_type == TYPE_USER ? printf("USER>\n") : msg.client_info.client_type == TYPE_SERVER ? printf("SERVER>\n") : printf("NONE>\n");
         // client_info.client_name = msg.client_info.client_name;
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
@@ -419,8 +419,8 @@ int disconnect_from_main_server()
 {
     int ret = EXIT_SUCCESS;
 
-    ret = client_send(DISCONNECT_COMM, NET_WAIT_TRUE);
-    printf("%s ret = %d\n", __func__, ret);
+    // ret = client_send(DISCONNECT_COMM, NET_WAIT_TRUE);
+    // printf("%s ret = %d\n", __func__, ret);
 
     if (server_fd > 0)
         close(server_fd);
