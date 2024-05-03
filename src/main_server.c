@@ -2,7 +2,7 @@
 
 #define QUEUE_SIZE                      20
 
-pthread_mutex_t fds_mutex = PTHREAD_MUTEX_INITIALIZER;
+// pthread_mutex_t fds_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void *_processing_server_thread(void *args)
 {
@@ -11,7 +11,9 @@ void *_processing_server_thread(void *args)
     mqd_t fds_q;
     mqd_t broadcast_q;
     char queue_msg[QUEUE_SIZE+1];
-    int srv_type = TYPE_NONE;
+    int client_type = TYPE_NONE;
+    int client_id = 0;
+    char client_name[NAME_LEN+1];
     int ret = 0;
 
     fds_q = mq_open("/main_server_fds", O_RDONLY);
@@ -69,11 +71,15 @@ void *_processing_server_thread(void *args)
                         {
                             printf("User: %s(%d) connected\n", msg.client_info.client_name, msg.client_info.id);
 
+                            client_type = TYPE_USER;
+                            client_id = 1;
+                            strncpy(client_name, "NewUser", NAME_LEN);
+
                             msg.command = CONNECT_ANSW;
-                            strncpy(msg.client_info.client_name, "NewUser", sizeof(msg.client_info.client_name));
-                            msg.client_info.id = 1;
-                            msg.client_info.client_type = TYPE_USER;
-                            msg.client_info.cur_server = 1;
+                            strncpy(msg.client_info.client_name, client_name, NAME_LEN);
+                            msg.client_info.id = client_id;
+                            msg.client_info.client_type = client_type;
+                            msg.client_info.cur_server = 0;
 
                             if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
                             {
@@ -89,17 +95,19 @@ void *_processing_server_thread(void *args)
                         }
                         else if (msg.command == CREATE_COMM)
                         {
-                            printf("User"/*OPTIONAL: Find name by ID*/" #%d creating a server <%s>, address: %s:%d\n", msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
+                            printf("User %s #%d creating a server <%s>, address: %s:%d\n", client_name, msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
 
                             // check if given address is free, allocate memory to server, send request
                         }
                         else if (msg.command == RENAME_COMM)
                         {
-                            printf("User"/*OPTIONAL: Find name by ID*/" #%d requested rename operation to <%s>\n", msg.client_info.id, msg.client_info.client_name);
+                            printf("User %s #%d requested rename operation to <%s>\n", client_name, msg.client_info.id, msg.client_info.client_name);
+
+
                         }
                         else if (msg.command == DISCONNECT_COMM)
                         {
-                            if (srv_type != TYPE_SERVER)
+                            if (client_type != TYPE_SERVER)
                                 break;
                             msg.command = DISCONNECT_ANSW;
 
@@ -126,11 +134,20 @@ void *_processing_server_thread(void *args)
                         }
                         else if (msg.command == SHUT_ROOM_COMM)
                         {
-                            printf("User"/*OPTIONAL: Find name by ID*/"#%d shutting a server <%s>, address: %s:%d\n", msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
+                            printf("User %s #%d shutting a server <%s>, address: %s:%d\n", client_name, msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
                         }
                         else if (msg.command == SHUT_SRV_COMM)
                         {
+                            msg.command = SHUT_SRV_ANSW;
 
+                            if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                            {
+                                perror("send");
+                                break;
+                            }
+
+                            puts("Shut down processing server");
+                            break;
                         }
                     }
                     pfd.revents = 0;

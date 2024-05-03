@@ -21,11 +21,22 @@
 #define MAIN_SERVER_LISTEN_BACKLOG      50
 #define MAIN_SERVER_CLIENT_FD_ALLOC     10
 
+#define NAME_LEN                        20
+
 #define NET_WAIT_TRUE                   1
 #define NET_WAIT_FALSE                  0
 
 #define NET_SYSTEM_ERR                  2
 #define NET_SOFTWARE_ERR                1
+
+#define PING_REQUEST                    (1 << 0)
+#define CONNECT_REQUEST                 (1 << 1)
+#define JOIN_REQUEST                    (1 << 2)
+#define CREATE_REQUEST                  (1 << 3)
+#define RENAME_REQUEST                  (1 << 4)
+#define DISCONNECT_REQUEST              (1 << 5)
+#define SHUT_ROOM_REQUEST               (1 << 6)
+#define SHUT_SRV_REQUEST                (1 << 7)
 
 enum client_types
 {
@@ -57,12 +68,13 @@ enum answers
     DISCONNECT_ANSW,
     CLIENT_QUIT_ANSW,
     SHUT_ROOM_ANSW,
+    SHUT_SRV_ANSW,
     ERROR_ANSW
 };
 
 struct client_info_t
 {
-    char client_name[20];
+    char client_name[NAME_LEN+1];
     int id;
     int client_type;
     int cur_server;
@@ -70,7 +82,7 @@ struct client_info_t
 
 struct server_info_t
 {
-    char server_name[20];
+    char server_name[NAME_LEN+1];
     char ip[16];
     int host_id;
     unsigned short port;
@@ -78,7 +90,7 @@ struct server_info_t
 
 struct join_srv_t
 {
-    char client_name[20];
+    char client_name[NAME_LEN+1];
     char ip[16];
     int usr_id;
     unsigned short port;
