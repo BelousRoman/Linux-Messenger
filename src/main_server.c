@@ -4,16 +4,51 @@
 
 // pthread_mutex_t fds_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+struct server_thread_t *threads = NULL;
+int threads_count = 0;
+
+static void sigint_handler(int sig, siginfo_t *si, void *unused)
+{
+    exit(EXIT_SUCCESS);
+}
+
+void shutdown_server(void)
+{
+    if (threads != NULL)
+    {
+        int index;
+
+        for (index = 0; index < threads_count; index++)
+        {
+            pthread_cancel(threads[index].tid);
+            if (threads[index].fd > 0)
+                close(threads[index].fd);
+        }
+
+        free(threads);
+    }
+
+    unlink("/free_threads_sem");
+    unlink("/busy_threads_sem");
+    unlink("/main_server_fds");
+
+    puts("Server shutdown");
+}
+
 void *_processing_server_thread(void *args)
 {
 	struct pollfd pfd;
 	struct client_msg_t msg;
     mqd_t fds_q;
-    mqd_t broadcast_q;
     char queue_msg[QUEUE_SIZE+1];
+    sem_t *free_threads_sem;
+    sem_t *busy_threads_sem;
+
+    int thread_id = (int)args;
     int client_type = TYPE_NONE;
     int client_id = 0;
     char client_name[NAME_LEN+1];
+
     int ret = 0;
 
     fds_q = mq_open("/main_server_fds", O_RDONLY);
@@ -27,15 +62,43 @@ void *_processing_server_thread(void *args)
 	/* Set canceltype so thread could be canceled at any time*/
 	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
+    /* Wait for parent to create sem segments, then get it's fds */
+	while ((free_threads_sem = sem_open("/free_threads_sem", O_RDWR)) == SEM_FAILED)
+	{
+		if (errno != ENOENT)
+		{
+			perror("free_threads_sem sem_open");
+			exit(EXIT_FAILURE);
+		}
+	}
+	while ((busy_threads_sem = sem_open("/busy_threads_sem", O_RDWR)) == SEM_FAILED)
+	{
+		if (errno != ENOENT)
+		{
+			perror("busy_threads_sem sem_open");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+    sem_post(free_threads_sem);
+
     while(1)
     {
         if (mq_receive(fds_q, queue_msg, QUEUE_SIZE, NULL) == -1)
         {
             perror("mq_receive");
+            continue;
         }
         pfd.fd = strtol(queue_msg, NULL, 0);
 
-        printf("Processing server will read the %dth fd\n", pfd.fd);
+        sem_wait(free_threads_sem);
+        sem_post(busy_threads_sem);
+
+        pthread_mutex_lock(&threads[thread_id].mutex);
+        threads[thread_id].fd = pfd.fd;
+        pthread_mutex_unlock(&threads[thread_id].mutex);
+
+        printf("Processing server #%d will read the %dth fd\n", thread_id, pfd.fd);
 
         while(1)
         {
@@ -159,6 +222,12 @@ void *_processing_server_thread(void *args)
                 }
             }
         }
+        sem_wait(busy_threads_sem);
+        sem_post(free_threads_sem);
+
+        pthread_mutex_lock(&threads[thread_id].mutex);
+        threads[thread_id].fd = 0;
+        pthread_mutex_unlock(&threads[thread_id].mutex);
     }
 	
     mq_close(fds_q);
@@ -174,7 +243,12 @@ int main_server()
     int fds_len = MAIN_SERVER_LISTEN_BACKLOG;
     struct sockaddr_in client;
     int client_size;
-	pthread_t *tid = NULL;
+
+    struct sigaction sa;
+
+    sem_t *free_threads_sem;
+    sem_t *busy_threads_sem;
+
     mqd_t fds_q;
     mqd_t *broadcast_q;
     struct mq_attr attr;
@@ -186,12 +260,48 @@ int main_server()
     int srvs_num = 0;
     int ret = 0;
 
-    // tid = malloc(tcp_alloc_threads * sizeof(pthread_t));
-    // if (tid == NULL)
-    // {
-    //     printf("malloc: %s(%d)\n", strerror(errno), errno);
-    //     exit(EXIT_FAILURE);
-    // }
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = sigint_handler;
+    if (sigaction(SIGINT, &sa, NULL) == -1)
+    {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    if (atexit(shutdown_server) != 0)
+    {
+        perror("atexit");
+        exit(EXIT_FAILURE);
+    }
+
+    free_threads_sem = sem_open("/free_threads_sem", O_CREAT | O_RDWR, 0666, 0);
+	if (free_threads_sem == SEM_FAILED)
+	{
+		perror("free_threads_sem sem_open");
+		exit(EXIT_FAILURE);
+	}
+	busy_threads_sem = sem_open("/busy_threads_sem", O_CREAT | O_RDWR, 0666, 0);
+	if (busy_threads_sem == SEM_FAILED)
+	{
+		perror("busy_threads_sem sem_open");
+		exit(EXIT_FAILURE);
+	}
+
+    threads_count = MAIN_SERVER_LISTEN_BACKLOG;
+    threads = malloc(threads_count * sizeof(struct server_thread_t));
+    if (threads == NULL)
+    {
+        printf("malloc: %s(%d)\n", strerror(errno), errno);
+        exit(EXIT_FAILURE);
+    }
+
+    for (index = 0; index < threads_count; index++)
+    {
+        threads[index].tid = NULL;
+        pthread_create(&threads[index].tid, NULL, _processing_server_thread, index);
+        threads[index].fd = 0;
+        pthread_mutex_init(&threads[index].mutex, NULL);
+    }
 
     attr.mq_maxmsg = 5;
 	attr.mq_msgsize = sizeof(char) * QUEUE_SIZE;
@@ -202,8 +312,6 @@ int main_server()
         perror("mq_open");
         exit(EXIT_FAILURE);
     }
-
-    pthread_create(&tid, NULL, _processing_server_thread, NULL);
 
     /* Fill 'client_pfds' and 'server' with 0's */
     // memset(client_pfds, 0, sizeof(struct pollfd) * fds_len);
@@ -261,13 +369,7 @@ int main_server()
         exit(EXIT_FAILURE);
     }
 
-    // if(client_pfds != NULL)
-    // {
-    //     free(client_pfds);
-    // }
-    // pthread_join(tid, NULL);
     mq_close(fds_q);
-    unlink("/main_server_fds");
 
     return ret;
 }

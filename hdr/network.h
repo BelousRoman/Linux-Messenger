@@ -14,6 +14,8 @@
 #include <malloc.h>
 #include <pthread.h>
 #include <fcntl.h>
+#include <semaphore.h>
+#include <signal.h>
 #include <mqueue.h>
 
 #include "configurator.h"
@@ -70,6 +72,13 @@ enum answers
     SHUT_ROOM_ANSW,
     SHUT_SRV_ANSW,
     ERROR_ANSW
+};
+
+struct server_thread_t
+{
+    pthread_t tid;
+    int fd;
+    pthread_mutex_t mutex;
 };
 
 struct client_info_t
