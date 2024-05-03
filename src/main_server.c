@@ -16,6 +16,8 @@ struct servers_list_t *servers_list = NULL;
 int servers_count = 0;
 pthread_mutex_t servers_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+sem_t *clients_count_sem;
+
 static void sigint_handler(int sig, siginfo_t *si, void *unused)
 {
     exit(EXIT_SUCCESS);
@@ -44,6 +46,7 @@ void shutdown_server(void)
 
     unlink("/free_threads_sem");
     unlink("/busy_threads_sem");
+    unlink("/clients_count_sem");
     unlink("/main_server_fds");
 
     puts("Server shutdown");
@@ -68,6 +71,7 @@ void *_processing_server_thread(void *args)
     char queue_msg[QUEUE_SIZE+1];
     sem_t *free_threads_sem;
     sem_t *busy_threads_sem;
+    sem_t *clients_count_sem;
 
     int thread_id = (int)args;
     int client_type = TYPE_NONE;
@@ -101,6 +105,14 @@ void *_processing_server_thread(void *args)
 		if (errno != ENOENT)
 		{
 			perror("busy_threads_sem sem_open");
+			exit(EXIT_FAILURE);
+		}
+	}
+    while ((clients_count_sem = sem_open("/clients_count_sem", O_RDWR)) == SEM_FAILED)
+	{
+		if (errno != ENOENT)
+		{
+			perror("clients_count_sem sem_open");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -147,98 +159,101 @@ void *_processing_server_thread(void *args)
                     }
                     else
                     {
-                        if (msg.command == PING_COMM)
+                        if (msg.command.status == STATUS_REQUEST)
                         {
-                            puts("PING command received");
-                            msg.command = PING_ANSW;
-
-                            if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                            if (msg.command.id == PING_COMM)
                             {
-                                perror("send");
+                                puts("PING command received");
+                                msg.command.status = STATUS_ANSWER;
+
+                                if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                                {
+                                    perror("send");
+                                    break;
+                                }
+                            }
+                            else if (msg.command.id == CONNECT_COMM)
+                            {
+                                printf("User: %s(%d) connected\n", msg.client_info.client_name, msg.client_info.id);
+
+                                client_type = TYPE_USER;
+                                client_id = 1;
+                                strncpy(client_name, "NewUser", NAME_LEN);
+
+                                msg.command.status = STATUS_ANSWER;
+                                strncpy(msg.client_info.client_name, client_name, NAME_LEN);
+                                msg.client_info.id = client_id;
+                                msg.client_info.client_type = client_type;
+                                msg.client_info.cur_server = 0;
+
+                                if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                                {
+                                    perror("send");
+                                    break;
+                                }
+
+                                sem_post(clients_count_sem);
+                            }
+                            else if (msg.command.id == JOIN_COMM)
+                            {
+                                printf("User: %s(%d) attempting to join server %s:%d\n", msg.join_srv.client_name, msg.join_srv.usr_id, msg.join_srv.ip, msg.join_srv.port);
+
+                                // find server with this address and send connect request to it, change client state if attempt was success
+                            }
+                            else if (msg.command.id == CREATE_COMM)
+                            {
+                                printf("User %s #%d creating a server <%s>, address: %s:%d\n", client_name, msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
+
+                                // check if given address is free, allocate memory to server, send request
+                            }
+                            else if (msg.command.id == RENAME_COMM)
+                            {
+                                printf("User %s #%d requested rename operation to <%s>\n", client_name, msg.client_info.id, msg.client_info.client_name);
+                            }
+                            else if (msg.command.id == DISCONNECT_COMM)
+                            {
+                                if (client_type != TYPE_SERVER)
+                                    break;
+                                msg.command.status = STATUS_ANSWER;
+
+                                if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                                {
+                                    perror("send");
+                                    break;
+                                }
+
+                                puts("Shut down processing server");
                                 break;
                             }
-                        }
-                        else if (msg.command == CONNECT_COMM)
-                        {
-                            printf("User: %s(%d) connected\n", msg.client_info.client_name, msg.client_info.id);
-
-                            client_type = TYPE_USER;
-                            client_id = 1;
-                            strncpy(client_name, "NewUser", NAME_LEN);
-
-                            msg.command = CONNECT_ANSW;
-                            strncpy(msg.client_info.client_name, client_name, NAME_LEN);
-                            msg.client_info.id = client_id;
-                            msg.client_info.client_type = client_type;
-                            msg.client_info.cur_server = 0;
-
-                            if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                            else if (msg.command.id == CLIENT_QUIT_COMM)
                             {
-                                perror("send");
+                                printf("User: %s(%d) disconnected\n", msg.client_info.client_name, msg.client_info.id);
+
+                                msg.command.status = STATUS_ANSWER;
+
+                                if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                                {
+                                    perror("send");
+                                    break;
+                                }
+                            }
+                            else if (msg.command.id == SHUT_ROOM_COMM)
+                            {
+                                printf("User %s #%d shutting a server <%s>, address: %s:%d\n", client_name, msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
+                            }
+                            else if (msg.command.id == SHUT_SRV_COMM)
+                            {
+                                msg.command.status = STATUS_ANSWER;
+
+                                if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                                {
+                                    perror("send");
+                                    break;
+                                }
+
+                                puts("Shut down processing server");
                                 break;
                             }
-                        }
-                        else if (msg.command == JOIN_COMM)
-                        {
-                            printf("User: %s(%d) attempting to join server %s:%d\n", msg.join_srv.client_name, msg.join_srv.usr_id, msg.join_srv.ip, msg.join_srv.port);
-
-                            // find server with this address and send connect request to it, change client state if attempt was success
-                        }
-                        else if (msg.command == CREATE_COMM)
-                        {
-                            printf("User %s #%d creating a server <%s>, address: %s:%d\n", client_name, msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
-
-                            // check if given address is free, allocate memory to server, send request
-                        }
-                        else if (msg.command == RENAME_COMM)
-                        {
-                            printf("User %s #%d requested rename operation to <%s>\n", client_name, msg.client_info.id, msg.client_info.client_name);
-
-
-                        }
-                        else if (msg.command == DISCONNECT_COMM)
-                        {
-                            if (client_type != TYPE_SERVER)
-                                break;
-                            msg.command = DISCONNECT_ANSW;
-
-                            if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
-                            {
-                                perror("send");
-                                break;
-                            }
-
-                            puts("Shut down processing server");
-                            break;
-                        }
-                        else if (msg.command == CLIENT_QUIT_COMM)
-                        {
-                            printf("User: %s(%d) disconnected\n", msg.client_info.client_name, msg.client_info.id);
-
-                            msg.command = CLIENT_QUIT_ANSW;
-
-                            if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
-                            {
-                                perror("send");
-                                break;
-                            }
-                        }
-                        else if (msg.command == SHUT_ROOM_COMM)
-                        {
-                            printf("User %s #%d shutting a server <%s>, address: %s:%d\n", client_name, msg.server_info.host_id, msg.server_info.server_name, msg.server_info.ip, msg.server_info.port);
-                        }
-                        else if (msg.command == SHUT_SRV_COMM)
-                        {
-                            msg.command = SHUT_SRV_ANSW;
-
-                            if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
-                            {
-                                perror("send");
-                                break;
-                            }
-
-                            puts("Shut down processing server");
-                            break;
                         }
                     }
                     pfd.revents = 0;
@@ -259,6 +274,8 @@ void *_processing_server_thread(void *args)
         pthread_mutex_lock(&threads[thread_id].mutex);
         threads[thread_id].fd = 0;
         pthread_mutex_unlock(&threads[thread_id].mutex);
+
+        sem_wait(clients_count_sem);
     }
 	
     mq_close(fds_q);
@@ -317,6 +334,12 @@ int main_server()
 		perror("busy_threads_sem sem_open");
 		exit(EXIT_FAILURE);
 	}
+    clients_count_sem = sem_open("/clients_count_sem", O_CREAT | O_RDWR, 0666, 0);
+	if (clients_count_sem == SEM_FAILED)
+	{
+		perror("clients_count_sem sem_open");
+		exit(EXIT_FAILURE);
+	}
 
     sem_getvalue(free_threads_sem, &sem_value);
 	while (sem_value > 0)
@@ -329,6 +352,12 @@ int main_server()
 	{
 		sem_trywait(busy_threads_sem);
 		sem_getvalue(busy_threads_sem, &sem_value);
+	}
+    sem_getvalue(clients_count_sem, &sem_value);
+	while (sem_value > 0)
+	{
+		sem_trywait(clients_count_sem);
+		sem_getvalue(clients_count_sem, &sem_value);
 	}
 
     pthread_mutex_lock(&threads_mutex);

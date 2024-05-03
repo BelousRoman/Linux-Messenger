@@ -105,10 +105,13 @@ int client_send(int comm, int wait_flag, ...)
 
     memset(&msg, NULL, sizeof(msg));
 
+    msg.command.id = comm;
+    msg.command.status = STATUS_REQUEST;
+
     switch (comm)
     {
     case PING_COMM:
-        msg.command = comm;
+        // msg.command.id = comm;
 
         if (wait_flag == NET_WAIT_TRUE)
         {
@@ -126,7 +129,7 @@ int client_send(int comm, int wait_flag, ...)
 
         break;
     case CONNECT_COMM:
-        msg.command = comm;
+        // msg.command = comm;
 
         // msg.client_info.client_name = config.name;
         strncpy(msg.client_info.client_name, config.name, sizeof(msg.client_info.client_name));
@@ -147,7 +150,7 @@ int client_send(int comm, int wait_flag, ...)
             int port = va_arg(ap, int);
             // printf("a(%ld) = <%d>\n", &port, port);
 
-            msg.command = comm;
+            // msg.command = comm;
 
             msg.join_srv.usr_id = client_info.id;
             // msg.join_srv.client_name = client_info.client_name;
@@ -173,7 +176,7 @@ int client_send(int comm, int wait_flag, ...)
             int port = va_arg(ap, int);
             // printf("port(%ld) = <%d>\n", &port, port);
 
-            msg.command = comm;
+            // msg.command = comm;
 
             msg.server_info.host_id = client_info.id;
             // msg.server_info.server_name = name;
@@ -195,7 +198,7 @@ int client_send(int comm, int wait_flag, ...)
             char * name = va_arg(ap, char *);
             // printf("name(%ld) = <%s>\n", &name, name);
 
-            msg.command = comm;
+            // msg.command = comm;
 
             // msg.client_info.client_name = name;
             strncpy(msg.client_info.client_name, name, sizeof(msg.client_info.client_name));
@@ -213,7 +216,7 @@ int client_send(int comm, int wait_flag, ...)
     case DISCONNECT_COMM:
         if (client_info.id != NULL)
         {
-            msg.command = comm;
+            // msg.command = comm;
 
             // msg.client_info.client_name = client_info.client_name;
             strncpy(msg.client_info.client_name, client_info.client_name, sizeof(msg.client_info.client_name));
@@ -231,7 +234,7 @@ int client_send(int comm, int wait_flag, ...)
     case CLIENT_QUIT_COMM:
         if (client_info.id != NULL)
         {
-            msg.command = comm;
+            // msg.command = comm;
 
             // msg.client_info.client_name = client_info.client_name;
             strncpy(msg.client_info.client_name, client_info.client_name, sizeof(msg.client_info.client_name));
@@ -245,7 +248,7 @@ int client_send(int comm, int wait_flag, ...)
     case SHUT_ROOM_COMM:
         if (client_info.id != NULL)
         {
-            msg.command = comm;
+            // msg.command = comm;
 
             msg.server_info.host_id = server_info.host_id;
             // msg.server_info.server_name = server_info.server_name;
@@ -264,7 +267,7 @@ int client_send(int comm, int wait_flag, ...)
     case SHUT_SRV_COMM:
         if (client_info.id != NULL)
         {
-            msg.command = comm;
+            // msg.command = comm;
 
             pthread_mutex_lock(&req_mutex);
             requests |= SHUT_SRV_REQUEST;
@@ -274,6 +277,7 @@ int client_send(int comm, int wait_flag, ...)
             ret = EXIT_FAILURE;
         break;
     default:
+        ret = EXIT_FAILURE;
         break;
     }
 
@@ -318,10 +322,15 @@ int client_recv(int comm)
     }
 
     // printf("Comm received: %d\n", msg.command);
-    
-    switch (msg.command)
+    if (msg.command.status != STATUS_ANSWER)
     {
-    case PING_ANSW:
+        ret = EXIT_FAILURE;
+        return ret;
+    }
+    
+    switch (msg.command.id)
+    {
+    case PING_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != PING_COMM) || !(requests & PING_REQUEST))
         {
@@ -347,7 +356,7 @@ int client_recv(int comm)
             delayMcs = endMcs - startMcs;
         }
         break;
-    case CONNECT_ANSW:
+    case CONNECT_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != CONNECT_COMM) || !(requests & CONNECT_REQUEST))
         {
@@ -370,7 +379,7 @@ int client_recv(int comm)
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
         break;
-    case JOIN_ANSW:
+    case JOIN_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != JOIN_COMM) || !(requests & JOIN_REQUEST))
         {
@@ -386,7 +395,7 @@ int client_recv(int comm)
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
         break;
-    case CREATE_ANSW:
+    case CREATE_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != CREATE_COMM) || !(requests & CREATE_REQUEST))
         {
@@ -402,7 +411,7 @@ int client_recv(int comm)
         strncpy(server_info.ip, msg.server_info.ip, sizeof(server_info.ip));
         server_info.port = msg.server_info.port;
         break;
-    case RENAME_ANSW:
+    case RENAME_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != RENAME_COMM) || !(requests & RENAME_REQUEST))
         {
@@ -418,7 +427,7 @@ int client_recv(int comm)
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
         break;
-    case DISCONNECT_ANSW:
+    case DISCONNECT_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != DISCONNECT_COMM) || !(requests & DISCONNECT_REQUEST))
         {
@@ -429,14 +438,14 @@ int client_recv(int comm)
         requests ^= DISCONNECT_REQUEST;
         pthread_mutex_unlock(&req_mutex);
         break;
-    case CLIENT_QUIT_ANSW:
+    case CLIENT_QUIT_COMM:
         if (comm != NULL && comm != CLIENT_QUIT_COMM)
         {
             ret = EXIT_FAILURE;
             break;
         }
         break;
-    case SHUT_ROOM_ANSW:
+    case SHUT_ROOM_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != SHUT_ROOM_COMM) || !(requests & SHUT_ROOM_REQUEST))
         {
@@ -452,7 +461,7 @@ int client_recv(int comm)
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
         break;
-    case SHUT_SRV_ANSW:
+    case SHUT_SRV_COMM:
         pthread_mutex_lock(&req_mutex);
         if ((comm != NULL && comm != SHUT_SRV_COMM) || !(requests & SHUT_SRV_REQUEST))
         {
@@ -464,9 +473,6 @@ int client_recv(int comm)
         pthread_mutex_unlock(&req_mutex);
 
         disconnect_from_main_server();
-        break;
-    case ERROR_ANSW:
-
         break;
     default:
         ret = EXIT_FAILURE;

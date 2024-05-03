@@ -61,25 +61,39 @@ enum commands
     SHUT_SRV_COMM
 };
 
-enum answers
+enum message_status
 {
-    PING_ANSW = (SHUT_SRV_COMM+1),
-    CONNECT_ANSW,
-    JOIN_ANSW,
-    CREATE_ANSW,
-    RENAME_ANSW,
-    DISCONNECT_ANSW,
-    CLIENT_QUIT_ANSW,
-    SHUT_ROOM_ANSW,
-    SHUT_SRV_ANSW,
-    ERROR_ANSW
+    STATUS_COMMAND = 1,
+    STATUS_REQUEST,
+    STATUS_ANSWER,
+    STATUS_ERROR
 };
+
+// enum answers
+// {
+//     PING_ANSW = (SHUT_SRV_COMM+1),
+//     CONNECT_ANSW,
+//     JOIN_ANSW,
+//     CREATE_ANSW,
+//     RENAME_ANSW,
+//     DISCONNECT_ANSW,
+//     CLIENT_QUIT_ANSW,
+//     SHUT_ROOM_ANSW,
+//     SHUT_SRV_ANSW,
+//     ERROR_ANSW
+// };
 
 struct server_thread_t
 {
     pthread_t tid;
     int fd;
     pthread_mutex_t mutex;
+};
+
+struct command_t
+{
+    uint8_t id;
+    uint8_t status;
 };
 
 struct client_info_t
@@ -114,7 +128,7 @@ struct error_t
 
 struct client_msg_t
 {
-    int command;
+    struct command_t command;
     union
     {
         struct client_info_t client_info;
