@@ -2,10 +2,19 @@
 
 #define QUEUE_SIZE                      20
 
-// pthread_mutex_t fds_mutex = PTHREAD_MUTEX_INITIALIZER;
+struct servers_list_t
+{
+    int thread_id;
+    struct server_info_t server_info;
+};
 
 struct server_thread_t *threads = NULL;
 int threads_count = 0;
+pthread_mutex_t threads_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct servers_list_t *servers_list = NULL;
+int servers_count = 0;
+pthread_mutex_t servers_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void sigint_handler(int sig, siginfo_t *si, void *unused)
 {
@@ -28,11 +37,27 @@ void shutdown_server(void)
         free(threads);
     }
 
+    if (servers_list != NULL)
+    {
+        free(servers_list);
+    }
+
     unlink("/free_threads_sem");
     unlink("/busy_threads_sem");
     unlink("/main_server_fds");
 
     puts("Server shutdown");
+}
+
+int _broadcast_message(struct client_msg_t *msg)
+{
+
+    return EXIT_SUCCESS;
+}
+
+int _cast_message_by_addr(struct client_msg_t *msg, char *ip, unsigned short port)
+{
+    return EXIT_SUCCESS;
 }
 
 void *_processing_server_thread(void *args)
@@ -93,6 +118,9 @@ void *_processing_server_thread(void *args)
 
         sem_wait(free_threads_sem);
         sem_post(busy_threads_sem);
+
+        pthread_mutex_lock(&threads_mutex);
+        pthread_mutex_unlock(&threads_mutex);
 
         pthread_mutex_lock(&threads[thread_id].mutex);
         threads[thread_id].fd = pfd.fd;
@@ -225,6 +253,9 @@ void *_processing_server_thread(void *args)
         sem_wait(busy_threads_sem);
         sem_post(free_threads_sem);
 
+        pthread_mutex_lock(&threads_mutex);
+        pthread_mutex_unlock(&threads_mutex);
+
         pthread_mutex_lock(&threads[thread_id].mutex);
         threads[thread_id].fd = 0;
         pthread_mutex_unlock(&threads[thread_id].mutex);
@@ -240,7 +271,6 @@ int main_server()
     struct sockaddr_in server;
     int tmp_fd = 0;
     struct pollfd *client_pfds = NULL;
-    int fds_len = MAIN_SERVER_LISTEN_BACKLOG;
     struct sockaddr_in client;
     int client_size;
 
@@ -248,6 +278,7 @@ int main_server()
 
     sem_t *free_threads_sem;
     sem_t *busy_threads_sem;
+    int sem_value = 0;
 
     mqd_t fds_q;
     mqd_t *broadcast_q;
@@ -287,7 +318,21 @@ int main_server()
 		exit(EXIT_FAILURE);
 	}
 
-    threads_count = MAIN_SERVER_LISTEN_BACKLOG;
+    sem_getvalue(free_threads_sem, &sem_value);
+	while (sem_value > 0)
+	{
+		sem_trywait(free_threads_sem);
+		sem_getvalue(free_threads_sem, &sem_value);
+	}
+    sem_getvalue(busy_threads_sem, &sem_value);
+	while (sem_value > 0)
+	{
+		sem_trywait(busy_threads_sem);
+		sem_getvalue(busy_threads_sem, &sem_value);
+	}
+
+    pthread_mutex_lock(&threads_mutex);
+    threads_count = SERVER_THREADS_ALLOC;
     threads = malloc(threads_count * sizeof(struct server_thread_t));
     if (threads == NULL)
     {
@@ -302,6 +347,7 @@ int main_server()
         threads[index].fd = 0;
         pthread_mutex_init(&threads[index].mutex, NULL);
     }
+    pthread_mutex_unlock(&threads_mutex);
 
     attr.mq_maxmsg = 5;
 	attr.mq_msgsize = sizeof(char) * QUEUE_SIZE;
@@ -314,7 +360,6 @@ int main_server()
     }
 
     /* Fill 'client_pfds' and 'server' with 0's */
-    // memset(client_pfds, 0, sizeof(struct pollfd) * fds_len);
 	memset(&server, 0, sizeof(server));
     memset(&queue_msg, 0, sizeof(queue_msg)/sizeof(char));
 
@@ -340,7 +385,7 @@ int main_server()
 			exit(EXIT_FAILURE);
 		}
 
-        if (listen(server_fd, MAIN_SERVER_LISTEN_BACKLOG) == -1)
+        if (listen(server_fd, SERVER_LISTEN_BACKLOG) == -1)
 		{
             printf("listen: %s(%d)\n", strerror(errno), errno);
 			exit(EXIT_FAILURE);
@@ -356,11 +401,60 @@ int main_server()
                 exit(EXIT_FAILURE);
             }
 
-            snprintf(queue_msg, QUEUE_SIZE, "%d", tmp_fd);
-            if (mq_send(fds_q, queue_msg, sizeof(QUEUE_SIZE), NULL) != 0)
+            if (sem_getvalue(free_threads_sem, &sem_value) != 0)
             {
-                perror("mq_send");
+                perror("sem_getvalue");
+                exit(EXIT_FAILURE);
             }
+
+            if (sem_value == 0)
+            {
+                if (sem_getvalue(busy_threads_sem, &sem_value) != 0)
+                {
+                    perror("sem_getvalue");
+                    exit(EXIT_FAILURE);
+                }
+                if (sem_value == threads_count)
+                {
+                    struct server_thread_t *tmp;
+                    tmp = realloc(threads, (threads_count+SERVER_THREADS_ALLOC) * sizeof(struct server_thread_t));
+                    if (tmp == NULL)
+                    {
+                        perror("realloc");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    pthread_mutex_lock(&threads_mutex);
+                    threads = tmp;
+                    tmp = NULL;
+
+                    for (index = threads_count; index < (threads_count+SERVER_THREADS_ALLOC); index++)
+                    {
+                        threads[index].tid = NULL;
+                        pthread_create(&threads[index].tid, NULL, _processing_server_thread, index);
+                        threads[index].fd = 0;
+                        pthread_mutex_init(&threads[index].mutex, NULL);
+                    }
+
+                    threads_count+=SERVER_THREADS_ALLOC;
+                    pthread_mutex_unlock(&threads_mutex);
+                }
+            }
+
+            snprintf(queue_msg, QUEUE_SIZE, "%d", tmp_fd);
+            while (mq_send(fds_q, queue_msg, sizeof(QUEUE_SIZE), NULL) == -1)
+            {
+                if (errno != EAGAIN)
+                {
+                    perror("mq_send");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            // if (mq_send(fds_q, queue_msg, sizeof(QUEUE_SIZE), NULL) != 0)
+            // {
+            //     perror("mq_send");
+            //     exit(EXIT_FAILURE);
+            // }
         }
     }
     else

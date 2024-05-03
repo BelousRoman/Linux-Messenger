@@ -20,10 +20,11 @@
 
 #include "configurator.h"
 
-#define MAIN_SERVER_LISTEN_BACKLOG      50
-#define MAIN_SERVER_CLIENT_FD_ALLOC     10
+#define SERVER_LISTEN_BACKLOG           50
+#define SERVER_THREADS_ALLOC            5
 
 #define NAME_LEN                        20
+#define IP_ADDR_LEN                     15
 
 #define NET_WAIT_TRUE                   1
 #define NET_WAIT_FALSE                  0
@@ -92,7 +93,7 @@ struct client_info_t
 struct server_info_t
 {
     char server_name[NAME_LEN+1];
-    char ip[16];
+    char ip[IP_ADDR_LEN+1];
     int host_id;
     unsigned short port;
 };
@@ -100,7 +101,7 @@ struct server_info_t
 struct join_srv_t
 {
     char client_name[NAME_LEN+1];
-    char ip[16];
+    char ip[IP_ADDR_LEN+1];
     int usr_id;
     unsigned short port;
 };
