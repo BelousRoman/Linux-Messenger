@@ -70,7 +70,14 @@ int read_config()
     {
         char buf[4097];
         memset(buf, NULL, 4097);
-        fread(buf, sizeof(char), 4096, config_file); // TODO: add feof() and ferror()
+        if (fread(buf, sizeof(char), 4096, config_file) == 0)// TODO: add feof() and ferror()
+        {
+            fclose(config_file);
+            sem_post(cfg_file_sem);
+            ret = _create_config_file();
+            return ret;
+        }
+
         fclose(config_file);
         sem_post(cfg_file_sem);
 
@@ -120,13 +127,13 @@ int read_config()
     }
 
     // printf("%s server addr: %s : %d\n", __func__, config.ip, config.port);
-    char *json_str = NULL;
-    json_str = cJSON_Print(json);
-    if (json_str != NULL)
-    {
-        printf("json_str = <%s>\n", json_str);
-        free(json_str);
-    }
+    // char *json_str = NULL;
+    // json_str = cJSON_Print(json);
+    // if (json_str != NULL)
+    // {
+    //     printf("json_str = <%s>\n", json_str);
+    //     free(json_str);
+    // }
 
     return ret;
 }
@@ -138,7 +145,7 @@ int update_json_file(void)
     int ret = EXIT_SUCCESS;
 
     sem_wait(cfg_file_sem);
-    config_file = fopen("cfg.json", "w");
+    config_file = fopen("cfg.json", "w+");
     if (config_file == NULL)
     {
         perror("fopen");
@@ -150,8 +157,8 @@ int update_json_file(void)
     printf("json_str = <%s>\n", json_str);
     if (json_str != NULL)
     {
-        // fputs(json_str, config_file);
-        printf("fputs ret = %d\n", fputs(json_str, config_file));
+        fputs(json_str, config_file);
+        // printf("fputs ret = %d\n", fputs(json_str, config_file));
         if (fflush(config_file) != 0)
         {
             perror("fflush");

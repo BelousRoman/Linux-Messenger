@@ -42,7 +42,7 @@ int main(void)
     ret = 0;
     ret += client_send(JOIN_COMM, NET_WAIT_FALSE, "255.255.255.255", 25519);
     ret += client_send(CREATE_COMM, NET_WAIT_FALSE, "SERVERNAME", "127.127.127.127", 24321);
-    ret += client_send(RENAME_COMM, NET_WAIT_FALSE, "NEWUSRNAME");
+    ret += client_send(RENAME_COMM, NET_WAIT_TRUE, "NEWUSRNAME");
     ret += disconnect_from_main_server();
     printf("disconnected, ret = %d\n", ret);
 

@@ -54,7 +54,6 @@ void shutdown_server(void)
 
 int _broadcast_message(struct client_msg_t *msg)
 {
-
     return EXIT_SUCCESS;
 }
 
@@ -78,6 +77,7 @@ void *_processing_server_thread(void *args)
     int client_id = 0;
     char client_name[NAME_LEN+1];
 
+    int sem_value;
     int ret = 0;
 
     fds_q = mq_open("/main_server_fds", O_RDONLY);
@@ -174,11 +174,27 @@ void *_processing_server_thread(void *args)
                             }
                             else if (msg.command.id == CONNECT_COMM)
                             {
-                                printf("User: %s(%d) connected\n", msg.client_info.client_name, msg.client_info.id);
+                                sem_post(clients_count_sem);
 
                                 client_type = TYPE_USER;
-                                client_id = 1;
-                                strncpy(client_name, "NewUser", NAME_LEN);
+                                if (msg.client_info.id == 0)
+                                {
+                                    sem_getvalue(clients_count_sem, &sem_value);
+                                    client_id = sem_value;
+                                }
+                                else
+                                {
+                                    client_id = msg.client_info.id;
+                                }
+                                if (strncmp(msg.client_info.client_name, DEFAULT_NAME, NAME_LEN) == 0)
+                                {
+                                    // strncpy(client_name, "NewUser", NAME_LEN);
+                                    snprintf(client_name, NAME_LEN, "User%d", client_id);
+                                }
+                                else
+                                {
+                                    strncpy(client_name, msg.client_info.client_name, NAME_LEN);
+                                }
 
                                 msg.command.status = STATUS_ANSWER;
                                 strncpy(msg.client_info.client_name, client_name, NAME_LEN);
@@ -191,8 +207,7 @@ void *_processing_server_thread(void *args)
                                     perror("send");
                                     break;
                                 }
-
-                                sem_post(clients_count_sem);
+                                printf("User: %s(%d) connected\n", msg.client_info.client_name, msg.client_info.id);
                             }
                             else if (msg.command.id == JOIN_COMM)
                             {
@@ -209,6 +224,15 @@ void *_processing_server_thread(void *args)
                             else if (msg.command.id == RENAME_COMM)
                             {
                                 printf("User %s #%d requested rename operation to <%s>\n", client_name, msg.client_info.id, msg.client_info.client_name);
+
+                                strncpy(client_name, msg.client_info.client_name, NAME_LEN);
+                                msg.command.status = STATUS_ANSWER;
+
+                                if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
+                                {
+                                    perror("send");
+                                    break;
+                                }
                             }
                             else if (msg.command.id == DISCONNECT_COMM)
                             {
@@ -236,6 +260,7 @@ void *_processing_server_thread(void *args)
                                     perror("send");
                                     break;
                                 }
+                                break;
                             }
                             else if (msg.command.id == SHUT_ROOM_COMM)
                             {

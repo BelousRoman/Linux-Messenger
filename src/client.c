@@ -422,6 +422,10 @@ int client_recv(int comm)
         client_info.client_type = msg.client_info.client_type;
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
+
+        ret += modify_config_entry(ENTRY_USERNAME, (char *)(client_info.client_name));
+
+        ret += update_json_file();
         break;
     case DISCONNECT_COMM:
         pthread_mutex_lock(&req_mutex);
@@ -482,7 +486,7 @@ int disconnect_from_main_server()
 {
     int ret = EXIT_SUCCESS;
 
-    ret = client_send(CLIENT_QUIT_COMM, NET_WAIT_FALSE);
+    ret = client_send(CLIENT_QUIT_COMM, NET_WAIT_TRUE);
 
     if (server_fd > 0)
         close(server_fd);
