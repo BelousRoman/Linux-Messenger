@@ -23,9 +23,6 @@
 #define SERVER_LISTEN_BACKLOG           50
 #define SERVER_THREADS_ALLOC            5
 
-#define NAME_LEN                        20
-#define IP_ADDR_LEN                     15
-
 #define NET_WAIT_TRUE                   1
 #define NET_WAIT_FALSE                  0
 

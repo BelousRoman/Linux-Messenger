@@ -317,15 +317,13 @@ int client_recv(int comm)
     if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
     {
         printf("recv: %s(%d)\n", strerror(errno), errno);
-        ret = EXIT_FAILURE;
-        return ret;
+        return EXIT_FAILURE;
     }
 
     // printf("Comm received: %d\n", msg.command);
     if (msg.command.status != STATUS_ANSWER)
     {
-        ret = EXIT_FAILURE;
-        return ret;
+        return EXIT_FAILURE;
     }
     
     switch (msg.command.id)
@@ -367,17 +365,15 @@ int client_recv(int comm)
         requests ^= CONNECT_REQUEST;
         pthread_mutex_unlock(&req_mutex);
 
-        // printf("Received info about client:\n\t" \
-        // "Name: <%s>\n\t" \
-        // "ID: <%d>\n\t" \
-        // "Current server: <%d>\n\t" \
-        // "CLIENT TYPE: <", msg.client_info.client_name, msg.client_info.id, msg.client_info.cur_server);
-        // msg.client_info.client_type == TYPE_USER ? printf("USER>\n") : msg.client_info.client_type == TYPE_SERVER ? printf("SERVER>\n") : printf("NONE>\n");
-        // client_info.client_name = msg.client_info.client_name;
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
+
+        ret += modify_config_entry(ENTRY_USERNAME, (char *)(client_info.client_name));
+        ret += modify_config_entry(ENTRY_ID, &client_info.id);
+
+        ret += update_json_file();
         break;
     case JOIN_COMM:
         pthread_mutex_lock(&req_mutex);

@@ -4,10 +4,20 @@
 #include "../libs/cJSON.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <semaphore.h>
 #include <stdarg.h>
 #include <string.h>
 #include <malloc.h>
 #include <errno.h>
+
+#include <unistd.h>
+
+#define NAME_LEN                        20
+#define IP_ADDR_LEN                     15
 
 #define LANGUAGE_ENGLISH    "en"
 #define LANGUAGE_RUSSIAN    "ru"
@@ -25,7 +35,7 @@
 
 enum
 {
-    TYPE_BOOL,
+    TYPE_BOOL = 1,
     TYPE_INT,
     TYPE_DOUBLE,
     TYPE_STRING,
@@ -33,19 +43,28 @@ enum
     TYPE_ARRAY
 };
 
+enum entries
+{
+    ENTRY_USERNAME = 1,
+    ENTRY_ID,
+    ENTRY_LANGUAGE,
+    ENTRY_IP,
+    ENTRY_PORT
+};
+
 enum
 {
-    LANG_EN,
+    LANG_EN = 1,
     LANG_RU
 };
 
 struct config_t
 {
-    int language;
-    char ip[16];
-    unsigned short port;
-    char name[20];
     int id;
+    char name[NAME_LEN+1];
+    int language;
+    char ip[IP_ADDR_LEN+1];
+    unsigned short port;
 };
 
 extern struct config_t config;
@@ -54,6 +73,7 @@ int read_config();
 
 int form_default_json(void);
 int update_json_file(void);
+int modify_config_entry(__uint8_t, void *);
 int AddOrModifyEntry(char *, int, void *, ...);
 
 #endif

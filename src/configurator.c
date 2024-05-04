@@ -1,61 +1,83 @@
 #include "../hdr/configurator.h"
 
-FILE *config_file = NULL;
+sem_t *cfg_file_sem = NULL;
 cJSON * json = NULL;
 
 struct config_t config;
 
 int _create_config_file()
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
-    if (config_file != NULL)
-        config_file = freopen("cfg.json", "w", config_file);
-    else
-        config_file = fopen("cfg.json", "w");
-    
-    if (config_file == NULL)
-    {
-        perror("fopen");
-        ret = -1;
-    }
-    else
-    {
-        ret += form_default_json();
-        ret += update_json_file();
-    }
+    ret += form_default_json();
+    ret += update_json_file();
 
     return ret;
 }
 
 int read_config()
 {
-    int ret = 0;
+    FILE *config_file = NULL;
+    int sem_value = 0;
+    int ret = EXIT_SUCCESS;
+    unlink("/cfg_file_sem");
+    cfg_file_sem = sem_open("/cfg_file_sem", O_RDWR);
+    if (cfg_file_sem == SEM_FAILED)
+    {
+        if (errno == ENOENT)
+        {
+            cfg_file_sem = sem_open("/cfg_file_sem", O_CREAT | O_RDWR, 0666, 1);
+            if (cfg_file_sem == SEM_FAILED)
+            {
+                perror("cfg_file_sem sem_open");
+                return EXIT_FAILURE;
+            }
 
-    config_file = fopen("cfg.json", "r");
+            sem_getvalue(cfg_file_sem, &sem_value);
+            while (sem_value > 0)
+            {
+                sem_trywait(cfg_file_sem);
+                sem_getvalue(cfg_file_sem, &sem_value);
+            }
+            sem_post(cfg_file_sem);
+        }
+        else
+        {
+            perror("cfg_file_sem sem_open");
+            return EXIT_FAILURE;
+        }
+    }
+    sem_getvalue(cfg_file_sem, &sem_value);
+    if (sem_value == 0) sem_post(cfg_file_sem);
+
+    sem_wait(cfg_file_sem);
+    config_file = fopen("cfg.json", "r+");
     if (config_file == NULL)
     {
         if (errno == ENOENT)
         {
+            sem_post(cfg_file_sem);
             ret = _create_config_file();
         }
         else
         {
             perror("fopen");
-            ret = 1;
+            sem_post(cfg_file_sem);
+            return EXIT_FAILURE;
         }
     }
     else
     {
         char buf[4097];
         memset(buf, NULL, 4097);
-        fread(buf, sizeof(char), 4096, config_file);
-        // printf("Read %ld bytes: <%s>\n", fread(buf, sizeof(char), 4096, config_file), buf);
+        fread(buf, sizeof(char), 4096, config_file); // TODO: add feof() and ferror()
+        fclose(config_file);
+        sem_post(cfg_file_sem);
 
         json = cJSON_Parse(buf);
 
         cJSON *language = cJSON_GetObjectItemCaseSensitive(json, "language"); 
-        if (cJSON_IsString(language) && (language->valuestring != NULL))
+        if (cJSON_IsString(language))
         {
             if (strncmp(LANGUAGE_ENGLISH, language->valuestring, sizeof(LANGUAGE_ENGLISH)) == 0)
             {
@@ -69,7 +91,7 @@ int read_config()
         }
 
         cJSON *username = cJSON_GetObjectItemCaseSensitive(json, "username"); 
-        if (cJSON_IsString(username) && (username->valuestring != NULL))
+        if (cJSON_IsString(username))
         {
             // printf("Username: %s\n", username->valuestring);
             strncpy(config.name, username->valuestring, sizeof(config.name));
@@ -83,7 +105,7 @@ int read_config()
         }
 
         cJSON *ip = cJSON_GetObjectItemCaseSensitive(json, "server_ip"); 
-        if (cJSON_IsString(ip) && (ip->valuestring != NULL))
+        if (cJSON_IsString(ip))
         {
             // printf("Server ip: %s\n", ip->valuestring);
             strncpy(config.ip, ip->valuestring, sizeof(config.ip));
@@ -97,35 +119,59 @@ int read_config()
         }
     }
 
-    if (config_file != NULL)
-        fclose(config_file);
-
     // printf("%s server addr: %s : %d\n", __func__, config.ip, config.port);
+    char *json_str = NULL;
+    json_str = cJSON_Print(json);
+    if (json_str != NULL)
+    {
+        printf("json_str = <%s>\n", json_str);
+        free(json_str);
+    }
 
     return ret;
 }
 
 int update_json_file(void)
 {
-    int ret = 0;
+    FILE *config_file = NULL;
+    char *json_str = NULL;
+    int ret = EXIT_SUCCESS;
+
+    sem_wait(cfg_file_sem);
+    config_file = fopen("cfg.json", "w");
+    if (config_file == NULL)
+    {
+        perror("fopen");
+        sem_post(cfg_file_sem);
+        return EXIT_FAILURE;
+    }
     
-    char *json_str = cJSON_Print(json);
+    json_str = cJSON_Print(json);
+    printf("json_str = <%s>\n", json_str);
     if (json_str != NULL)
     {
-        fputs(json_str, config_file);
-        fflush(config_file);
+        // fputs(json_str, config_file);
+        printf("fputs ret = %d\n", fputs(json_str, config_file));
+        if (fflush(config_file) != 0)
+        {
+            perror("fflush");
+            ret += EXIT_FAILURE;
+        }
 
         free(json_str);
     }
     else
-        ret = 1;
+        ret = EXIT_FAILURE;
+
+    fclose(config_file);
+    sem_post(cfg_file_sem);
 
     return ret;
 }
 
 int form_default_json(void)
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
     json = cJSON_CreateObject();
     if (json != NULL)
@@ -143,35 +189,27 @@ int form_default_json(void)
         config.port = DEFAULT_PORT;
     }
     else
-        ret = 1;
-
-    // cJSON_AddStringToObject(new_json, "language", LANGUAGE_ENGLISH);
-    // cJSON_AddStringToObject(new_json, "server_ip", LOCAL_IP_ADDR);
-    // cJSON_AddNumberToObject(new_json, "server_port", SRV_PORT);
+        ret = EXIT_FAILURE;
 
     return ret;
 }
 
 int AddOrModifyEntry(char * key, int value_type, void *value, ...)
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
     if (json != NULL)
     {
         va_list ap;
         va_start(ap, value);
-        // int a = va_arg(ap, int);
-        // printf("a(%ld) = <%d>\n", &a, a);
-        // char * a = va_arg(ap, char *);
-        // printf("a(%ld) = <%s>\n", &a, a);
         switch (value_type)
         {
             case TYPE_INT:
                 int int_val = (int)value;
-                cJSON *json_int = cJSON_GetObjectItem(json, key);
+                cJSON *json_int = cJSON_GetObjectItemCaseSensitive(json, key);
                 if (json_int != NULL)
                 {
-                    if (cJSON_IsNumber(json_int) == cJSON_True)
+                    if (cJSON_IsNumber(json_int))
                     {
                         cJSON_ReplaceItemInObjectCaseSensitive(json, key, cJSON_CreateNumber(int_val));
                     }
@@ -185,10 +223,10 @@ int AddOrModifyEntry(char * key, int value_type, void *value, ...)
                 char * str_val = (char *)value;
                 if (str_val != NULL)
                 {
-                    cJSON *json_str = cJSON_GetObjectItem(json, key);
+                    cJSON *json_str = cJSON_GetObjectItemCaseSensitive(json, key);
                     if (json_str != NULL)
                     {
-                        if (cJSON_IsString(json_str) == cJSON_True)
+                        if (cJSON_IsString(json_str))
                         {
                             cJSON_ReplaceItemInObjectCaseSensitive(json, key, cJSON_CreateString(str_val));
                         }
@@ -200,7 +238,7 @@ int AddOrModifyEntry(char * key, int value_type, void *value, ...)
                 }
                 else
                 {
-                    ret = 1;
+                    ret = EXIT_FAILURE;
                 }
                 break;
             case TYPE_OBJECT:
@@ -215,8 +253,57 @@ int AddOrModifyEntry(char * key, int value_type, void *value, ...)
     }
     else
     {
-        ret = 1;
+        ret = EXIT_FAILURE;
     }
 
+    return ret;
+}
+
+int modify_config_entry(__uint8_t entry, void *var)
+{
+    int ret = EXIT_SUCCESS;
+
+    switch (entry)
+    {
+    case ENTRY_USERNAME:
+        char *username = (char *)var;
+        strncpy(config.name, username, NAME_LEN);
+
+        ret += AddOrModifyEntry("username", TYPE_STRING, config.name);
+        break;
+    case ENTRY_ID:
+        int *id = (int *)var;
+        config.id = *id;
+
+        ret += AddOrModifyEntry("id", TYPE_INT, config.id);
+        break;
+    case ENTRY_LANGUAGE:
+        if (LANG_EN == (int *)var)
+        {
+            config.language = LANG_EN;
+            ret += AddOrModifyEntry("language", TYPE_STRING, LANGUAGE_ENGLISH);
+        }
+        else if (LANG_RU == (int *)var)
+        {
+            config.language = LANG_RU;
+            ret += AddOrModifyEntry("language", TYPE_STRING, LANGUAGE_RUSSIAN);
+        }
+        break;
+    case ENTRY_IP:
+        char *ip = (char *)var;
+        strncpy(config.ip, ip, IP_ADDR_LEN);
+
+        ret += AddOrModifyEntry("server_ip", TYPE_STRING, config.ip);
+        break;
+    case ENTRY_PORT:
+        unsigned short *port = (unsigned short *)var;
+        config.port = *port;
+
+        ret += AddOrModifyEntry("server_port", TYPE_INT, config.port);
+        break;
+    default:
+        ret = EXIT_FAILURE;
+        break;
+    }
     return ret;
 }
