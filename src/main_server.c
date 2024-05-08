@@ -385,6 +385,16 @@ int main_server()
 		sem_getvalue(clients_count_sem, &sem_value);
 	}
 
+    attr.mq_maxmsg = 5;
+	attr.mq_msgsize = sizeof(char) * QUEUE_SIZE;
+
+    fds_q = mq_open("/main_server_fds", O_CREAT | O_RDWR, 0666, &attr);
+    if (fds_q == -1)
+    {
+        perror("mq_open");
+        exit(EXIT_FAILURE);
+    }
+
     pthread_mutex_lock(&threads_mutex);
     threads_count = SERVER_THREADS_ALLOC;
     threads = malloc(threads_count * sizeof(struct server_thread_t));
@@ -402,16 +412,6 @@ int main_server()
         pthread_mutex_init(&threads[index].mutex, NULL);
     }
     pthread_mutex_unlock(&threads_mutex);
-
-    attr.mq_maxmsg = 5;
-	attr.mq_msgsize = sizeof(char) * QUEUE_SIZE;
-
-    fds_q = mq_open("/main_server_fds", O_CREAT | O_RDWR, 0666, &attr);
-    if (fds_q == -1)
-    {
-        perror("mq_open");
-        exit(EXIT_FAILURE);
-    }
 
     /* Fill 'client_pfds' and 'server' with 0's */
 	memset(&server, 0, sizeof(server));
@@ -480,7 +480,6 @@ int main_server()
 
                     pthread_mutex_lock(&threads_mutex);
                     threads = tmp;
-                    tmp = NULL;
 
                     for (index = threads_count; index < (threads_count+SERVER_THREADS_ALLOC); index++)
                     {
@@ -490,8 +489,9 @@ int main_server()
                         pthread_mutex_init(&threads[index].mutex, NULL);
                     }
 
-                    threads_count+=SERVER_THREADS_ALLOC;
+                    threads_count += SERVER_THREADS_ALLOC;
                     pthread_mutex_unlock(&threads_mutex);
+                    tmp = NULL;
                 }
             }
 

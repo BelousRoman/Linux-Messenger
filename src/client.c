@@ -19,7 +19,7 @@ int connect_to_main_server()
 	struct timespec ts;
 
     int index;
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
 	/* Set 'ts' time to define-constants */
 	ts.tv_sec = 0;
@@ -66,9 +66,9 @@ int connect_to_main_server()
 		nanosleep(&ts, NULL);
 	}
 
-    client_send(CONNECT_COMM, NET_WAIT_TRUE);
+    ret += client_send(CONNECT_COMM, WAIT_TRUE, RECV_TIMEOUT);
 
-    return EXIT_SUCCESS;
+    return ret;
 }
 
 int check_connection_to_main_server()
@@ -77,7 +77,7 @@ int check_connection_to_main_server()
     
     if (server_fd > 0)
     {
-        ret = client_send(PING_COMM, NET_WAIT_TRUE);
+        ret = client_send(PING_COMM, WAIT_TRUE, RECV_BLOCK);
     }
     else
         ret = EXIT_FAILURE;
@@ -87,7 +87,7 @@ int check_connection_to_main_server()
 
 int get_latency()
 {
-    if (delayMcs == NULL && client_send(PING_COMM, NET_WAIT_TRUE) == EXIT_FAILURE)
+    if (delayMcs == NULL && client_send(PING_COMM, WAIT_TRUE, RECV_BLOCK) == EXIT_FAILURE)
         return EXIT_FAILURE;
 
     return delayMcs;
@@ -113,7 +113,7 @@ int client_send(int comm, int wait_flag, ...)
     case PING_COMM:
         // msg.command.id = comm;
 
-        if (wait_flag == NET_WAIT_TRUE)
+        if (wait_flag == WAIT_TRUE)
         {
             if (gettimeofday(&start_tv, NULL) == -1)
             {
@@ -289,9 +289,10 @@ int client_send(int comm, int wait_flag, ...)
             ret = EXIT_FAILURE;
         }
 
-        if (wait_flag == NET_WAIT_TRUE)
+        if (wait_flag == WAIT_TRUE)
         {
-            ret = client_recv(comm);
+            int recv_mode = va_arg(ap, int);
+            ret = client_recv(comm, recv_mode);
         }
     }
 
@@ -300,24 +301,67 @@ int client_send(int comm, int wait_flag, ...)
     return ret;
 }
 
-int client_recv(int comm)
+int client_recv(int comm, int mode)
 {
     // printf("%s %d\n", __func__, comm);
     struct client_msg_t msg;
+    int index;
     int ret = EXIT_SUCCESS;
 
     memset(&msg, NULL, sizeof(msg));
 
     if (server_fd <= 0)
     {
-        ret = EXIT_FAILURE;
-        return ret;
-    }
-
-    if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
-    {
-        printf("recv: %s(%d)\n", strerror(errno), errno);
         return EXIT_FAILURE;
+    }
+    
+    switch (mode)
+    {
+    case RECV_BLOCK:
+        if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
+        {
+            printf("recv: %s(%d)\n", strerror(errno), errno);
+            return EXIT_FAILURE;
+        }
+        break;
+    case RECV_TIMEOUT:
+        struct timespec ts;
+        /* Set 'ts' time to define-constants */
+        ts.tv_sec = 0;
+        ts.tv_nsec = 500000000;
+        for (index = 0; index < 10; ++index)
+        {
+            if (recv(server_fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
+            {
+                if (errno != EAGAIN)
+                {
+                    return EXIT_FAILURE;
+                }
+            }
+            else
+            {
+                break;
+            }
+            nanosleep(&ts, NULL);
+        }
+        if (index == (10 - 1))
+        {
+            printf("recv: %s(%d)\n", strerror(errno), errno);
+            return EXIT_FAILURE;
+        }
+        break;
+    case RECV_NONBLOCK:
+        if (recv(server_fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
+        {
+            if (errno != EAGAIN)
+            {
+                printf("recv: %s(%d)\n", strerror(errno), errno);
+            }
+            return EXIT_FAILURE;
+        }
+        break;
+    default:
+        break;
     }
 
     // printf("Comm received: %d\n", msg.command);
@@ -486,7 +530,7 @@ int disconnect_from_main_server()
 {
     int ret = EXIT_SUCCESS;
 
-    ret = client_send(CLIENT_QUIT_COMM, NET_WAIT_TRUE);
+    ret = client_send(CLIENT_QUIT_COMM, WAIT_TRUE, RECV_BLOCK);
 
     if (server_fd > 0)
         close(server_fd);

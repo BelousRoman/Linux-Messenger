@@ -78,6 +78,8 @@ extern struct winsize size;
 void init_graphics();
 void deinit_graphics();
 
+int wait_wnd(char *);
+
 int menu_wnd();
 
 int join_srv_wnd();

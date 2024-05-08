@@ -208,6 +208,51 @@ void deinit_graphics()
     }
 }
 
+int wait_wnd(char *str)
+{
+    WINDOW *wnd;
+    WINDOW *subwnd;
+
+    int wnd_h;
+    int wnd_w;
+    int str_len = 0;
+    int ret = EXIT_SUCCESS;
+
+    if (str != NULL)
+    {
+        str_len = strlen(str);
+    }
+    else
+    {
+        return EXIT_FAILURE;
+    }
+
+    subwnd_w = 40;
+    subwnd_h = 3;
+    if (subwnd_w > (size.ws_col-6))
+    {
+        int tmp = (size.ws_col-6) / subwnd_w;
+        subwnd_w /= tmp;
+        subwnd_h += tmp;
+    }
+
+    wnd = newwin(subwnd_h+2, subwnd_w+6, (size.ws_row/2)-(subwnd_h/2), (size.ws_col/2)-(subwnd_w/2));
+    subwnd = derwin(wnd, subwnd_h, subwnd_w, 1, 3);
+
+    box(wnd, ACS_VLINE, ACS_HLINE);
+
+    wprintw(wnd, "%d", str_len);
+    wprintw(subwnd, "%s", str);
+
+    wrefresh(subwnd);
+    wgetch(wnd);
+
+    delwin(subwnd);
+    delwin(wnd);
+
+    return ret;
+}
+
 int menu_wnd()
 {
     WINDOW *subwnd;

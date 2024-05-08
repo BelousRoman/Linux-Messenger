@@ -23,9 +23,6 @@
 #define SERVER_LISTEN_BACKLOG           50
 #define SERVER_THREADS_ALLOC            5
 
-#define NET_WAIT_TRUE                   1
-#define NET_WAIT_FALSE                  0
-
 #define NET_SYSTEM_ERR                  2
 #define NET_SOFTWARE_ERR                1
 
@@ -66,19 +63,18 @@ enum message_status
     STATUS_ERROR
 };
 
-// enum answers
-// {
-//     PING_ANSW = (SHUT_SRV_COMM+1),
-//     CONNECT_ANSW,
-//     JOIN_ANSW,
-//     CREATE_ANSW,
-//     RENAME_ANSW,
-//     DISCONNECT_ANSW,
-//     CLIENT_QUIT_ANSW,
-//     SHUT_ROOM_ANSW,
-//     SHUT_SRV_ANSW,
-//     ERROR_ANSW
-// };
+enum net_wait_mode
+{
+    WAIT_FALSE = 0,
+    WAIT_TRUE
+};
+
+enum net_recv_mode
+{
+    RECV_BLOCK = 0,
+    RECV_TIMEOUT,
+    RECV_NONBLOCK
+};
 
 struct server_thread_t
 {
@@ -143,7 +139,7 @@ int connect_to_main_server();
 int check_connection_to_main_server();
 int get_latency();
 int client_send(int comm, int wait_flag, ...);
-int client_recv(int comm);
+int client_recv(int comm, int mode);
 int disconnect_from_main_server();
 
 int connect_to_chat_server();

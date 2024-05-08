@@ -20,7 +20,7 @@ int read_config()
     FILE *config_file = NULL;
     int sem_value = 0;
     int ret = EXIT_SUCCESS;
-    unlink("/cfg_file_sem");
+    // unlink("/cfg_file_sem");
     cfg_file_sem = sem_open("/cfg_file_sem", O_RDWR);
     if (cfg_file_sem == SEM_FAILED)
     {
@@ -34,12 +34,11 @@ int read_config()
             }
 
             sem_getvalue(cfg_file_sem, &sem_value);
-            while (sem_value > 0)
+            while (sem_value > 1)
             {
                 sem_trywait(cfg_file_sem);
                 sem_getvalue(cfg_file_sem, &sem_value);
             }
-            sem_post(cfg_file_sem);
         }
         else
         {
@@ -154,7 +153,7 @@ int update_json_file(void)
     }
     
     json_str = cJSON_Print(json);
-    printf("json_str = <%s>\n", json_str);
+    // printf("json_str = <%s>\n", json_str);
     if (json_str != NULL)
     {
         fputs(json_str, config_file);
