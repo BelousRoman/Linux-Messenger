@@ -10,8 +10,8 @@
 /* Global variable, used to store terminal's size in columns and rows */
 struct winsize size;
 
-int subwnd_h;
-int subwnd_w;
+int wnd_h;
+int wnd_w;
 
 int elem_h;
 int elem_w;
@@ -53,13 +53,13 @@ int _set_dimensions()
     popup_wnd_h = (elem_h*2)+2;
     popup_wnd_w = (elem_w*2)+2+(GFX_ELEM_HOFF*3);
 
-    subwnd_h = SUBWND_SET_H > SUBWND_MIN_H ? SUBWND_SET_H : SUBWND_MIN_H;
-    subwnd_w = SUBWND_SET_W > SUBWND_MIN_W ? SUBWND_SET_W : SUBWND_MIN_W;
+    wnd_h = SUBWND_SET_H > SUBWND_MIN_H ? SUBWND_SET_H : SUBWND_MIN_H;
+    wnd_w = SUBWND_SET_W > SUBWND_MIN_W ? SUBWND_SET_W : SUBWND_MIN_W;
 
-    panel_h = subwnd_h-2-(header_h+elem_h+GFX_ELEM_VOFF*2);
-    panel_w = subwnd_w-2-(elem_w+2+GFX_ELEM_HOFF*5);
+    panel_h = wnd_h-2-(header_h+elem_h+GFX_ELEM_VOFF*2);
+    panel_w = wnd_w-2-(elem_w+2+GFX_ELEM_HOFF*5);
 
-    if (subwnd_h > size.ws_row || subwnd_w > size.ws_col)
+    if (wnd_h > size.ws_row || wnd_w > size.ws_col)
         ret = 1;
 
     return ret;
@@ -208,13 +208,15 @@ void deinit_graphics()
     }
 }
 
-int wait_wnd(char *str)
+int wait_wnd(char *str, int type)
 {
     WINDOW *wnd;
     WINDOW *subwnd;
 
-    int wnd_h;
-    int wnd_w;
+    int main_wnd_w;
+    int main_wnd_h;
+    int subwnd_w;
+    int subwnd_h;
     int str_len = 0;
     int ret = EXIT_SUCCESS;
 
@@ -227,22 +229,29 @@ int wait_wnd(char *str)
         return EXIT_FAILURE;
     }
 
-    subwnd_w = 40;
+    subwnd_w = str_len;
     subwnd_h = 3;
-    if (subwnd_w > (size.ws_col-6))
+    if (subwnd_w > (size.ws_col-12))
     {
-        int tmp = (size.ws_col-6) / subwnd_w;
+        int tmp = (size.ws_col-12) / subwnd_w;
         subwnd_w /= tmp;
         subwnd_h += tmp;
     }
 
-    wnd = newwin(subwnd_h+2, subwnd_w+6, (size.ws_row/2)-(subwnd_h/2), (size.ws_col/2)-(subwnd_w/2));
-    subwnd = derwin(wnd, subwnd_h, subwnd_w, 1, 3);
+    main_wnd_w = subwnd_w + 12;
+    main_wnd_h = subwnd_h + 2;
+
+    wnd = newwin(main_wnd_h, main_wnd_w, (size.ws_row/2)-(main_wnd_h/2), (size.ws_col/2)-(main_wnd_w/2));
+    subwnd = derwin(wnd, subwnd_h, subwnd_w, 1, 6);
 
     box(wnd, ACS_VLINE, ACS_HLINE);
 
-    wprintw(wnd, "%d", str_len);
     wprintw(subwnd, "%s", str);
+
+    wmove(subwnd, subwnd_h-1, (subwnd_w/2)-1);
+    wattron(subwnd, A_BLINK);
+    waddch(subwnd, ACS_DIAMOND);
+    wattroff(subwnd, A_BLINK);
 
     wrefresh(subwnd);
     wgetch(wnd);
@@ -288,17 +297,17 @@ int menu_wnd()
 	* Create wnd, l_wnd and r_wnd, create borders, add line between main window
 	* and cwd window.
 	*/
-	subwnd = newwin(subwnd_h, subwnd_w, (size.ws_row/2)-(subwnd_h/2), (size.ws_col/2)-(subwnd_w/2));
+	subwnd = newwin(wnd_h, wnd_w, (size.ws_row/2)-(wnd_h/2), (size.ws_col/2)-(wnd_w/2));
     header_wnd = derwin(subwnd, header_h, header_w, 1, 1);
-    status_wnd = derwin(subwnd, elem_h, border_w, subwnd_h-(1+border_h+(elem_h*2)+(GFX_ELEM_VOFF*2)), 1+GFX_ELEM_HOFF);
+    status_wnd = derwin(subwnd, elem_h, border_w, wnd_h-(1+border_h+(elem_h*2)+(GFX_ELEM_VOFF*2)), 1+GFX_ELEM_HOFF);
     status_subwnd = derwin(status_wnd, 1, border_w-2, 1, 1);
-	btns_border = derwin(subwnd, border_h, border_w, subwnd_h-1-border_h-elem_h-(GFX_ELEM_VOFF*2), 1+GFX_ELEM_HOFF);
+	btns_border = derwin(subwnd, border_h, border_w, wnd_h-1-border_h-elem_h-(GFX_ELEM_VOFF*2), 1+GFX_ELEM_HOFF);
     btns[0] = derwin(btns_border, elem_h, elem_w, 1+GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
     btns[1] = derwin(btns_border, elem_h, elem_w, 1+elem_h+(GFX_ELEM_VOFF*2), 1+GFX_ELEM_HOFF);
     btns[2] = derwin(btns_border, elem_h, elem_w, 1+(elem_h*2)+(GFX_ELEM_VOFF*3), 1+GFX_ELEM_HOFF);
     btns[3] = derwin(btns_border, elem_h, elem_w, 1+(elem_h*3)+(GFX_ELEM_VOFF*4), 1+GFX_ELEM_HOFF);
-    note_wnd = derwin(subwnd, elem_h, subwnd_w-2-(GFX_ELEM_HOFF*2), subwnd_h-1-elem_h, 1+GFX_ELEM_HOFF);
-    note_subwnd = derwin(note_wnd, 1, subwnd_w-4-(GFX_ELEM_HOFF*2), 1, 1);
+    note_wnd = derwin(subwnd, elem_h, wnd_w-2-(GFX_ELEM_HOFF*2), wnd_h-1-elem_h, 1+GFX_ELEM_HOFF);
+    note_subwnd = derwin(note_wnd, 1, wnd_w-4-(GFX_ELEM_HOFF*2), 1, 1);
     panel_wnd = derwin(subwnd, panel_h, panel_w, 1+header_h+GFX_ELEM_VOFF, 1+border_w+(GFX_ELEM_HOFF*2));
 
     //box(stdscr, NULL, NULL);
@@ -311,12 +320,12 @@ int menu_wnd()
     box(btns[3], ACS_VLINE, ACS_HLINE);
     box(note_wnd, ' ', ' ');
 
-    wmove(subwnd, 0, (subwnd_w/2)-strlen(MENU_SCR_LABEL)/2);
+    wmove(subwnd, 0, (wnd_w/2)-strlen(MENU_SCR_LABEL)/2);
     wmove(btns[0], 1, (elem_w/2)-strlen(labels[0])/2);
     wmove(btns[1], 1, (elem_w/2)-strlen(labels[1])/2);
     wmove(btns[2], 1, (elem_w/2)-strlen(labels[2])/2);
     wmove(btns[3], 1, (elem_w/2)-strlen(labels[3])/2);
-    wmove(note_subwnd, 0, ((subwnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE)/2);
+    wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE)/2);
 
     wprintw(subwnd, MENU_SCR_LABEL);
     wprintw(header_wnd,
@@ -583,8 +592,8 @@ int join_srv_wnd()
     int line = 0;
     int vis_line = 0;
 
-    int border_h = subwnd_h-2-elem_h-(GFX_ELEM_VOFF*2);
-    int border_w = subwnd_w-2-(GFX_ELEM_HOFF*2);
+    int border_h = wnd_h-2-elem_h-(GFX_ELEM_VOFF*2);
+    int border_w = wnd_w-2-(GFX_ELEM_HOFF*2);
 
     int pad_h = sizeof(arr) > border_h-(elem_h*2) ? sizeof(arr) : border_h-(elem_h*2);
     int pad_w = border_w-2;
@@ -602,7 +611,7 @@ int join_srv_wnd()
 
     
     
-    subwnd = newwin(subwnd_h, subwnd_w, (size.ws_row/2)-(subwnd_h/2), (size.ws_col/2)-(subwnd_w/2));
+    subwnd = newwin(wnd_h, wnd_w, (size.ws_row/2)-(wnd_h/2), (size.ws_col/2)-(wnd_w/2));
     border_wnd = derwin(subwnd, border_h, border_w, 1+GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
     serv_name_wnd = derwin(border_wnd, 1, name_field_width, 1, 1);
     serv_address_wnd = derwin(border_wnd, 1, address_field_width, 1, border_w-1-field_width-1-address_field_width);
@@ -613,7 +622,7 @@ int join_srv_wnd()
     btns[0] = derwin(border_wnd, 1, field_width, (border_h-2), border_w-1-(field_width*3)-2);
     btns[1] = derwin(border_wnd, 1, field_width, (border_h-2), border_w-1-(field_width*2)-1);
     btns[2] = derwin(border_wnd, 1, field_width, (border_h-2), border_w-1-field_width);
-    note_wnd = derwin(subwnd, elem_h, border_w, subwnd_h-1-elem_h, 1+GFX_ELEM_HOFF);
+    note_wnd = derwin(subwnd, elem_h, border_w, wnd_h-1-elem_h, 1+GFX_ELEM_HOFF);
     note_subwnd = derwin(note_wnd, 1, border_w-4, 1, 1);
     // JOIN_SCR_MAN_ADDR_LABEL
     
@@ -626,7 +635,7 @@ int join_srv_wnd()
     box(border_wnd, ACS_VLINE, ACS_HLINE);
     box(note_wnd, ' ', ' ');
     
-    wmove(subwnd, 0, (subwnd_w/2)-strlen(JOIN_SCR_LABEL)/2);
+    wmove(subwnd, 0, (wnd_w/2)-strlen(JOIN_SCR_LABEL)/2);
     wprintw(subwnd, JOIN_SCR_LABEL);
     // wmove(serv_name_wnd, 1, (name_field_width/2)-strlen(JOIN_SCR_SRV_NAME_LABEL)/2);
     wmove(serv_name_wnd, 1, 1);
@@ -657,7 +666,7 @@ int join_srv_wnd()
         wprintw(btns[index], "%s", labels[index]);
     }
 
-    wmove(note_subwnd, 0, ((subwnd_w-4-(GFX_ELEM_HOFF*2))/2)-join_note_size/2);
+    wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-join_note_size/2);
     wprintw(note_subwnd, "%s", join_note_label);
 
     wmove(border_wnd, 2, 1);
@@ -762,7 +771,7 @@ int join_srv_wnd()
 
     wrefresh(subwnd);
     // wrefresh(border_wnd);
-    prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+elem_h+1, (size.ws_col/2)-(subwnd_w/2)+3, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+    prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+elem_h+1, (size.ws_col/2)-(wnd_w/2)+3, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
     
     scrollok(mainpad, true);
     keypad(subwnd, true);
@@ -771,7 +780,7 @@ int join_srv_wnd()
         symbol = wgetch(subwnd);
         if ('\n' == symbol) 
         {
-            WINDOW * sub_pad = newwin(10,40, subwnd_h/2, subwnd_w/2);
+            WINDOW * sub_pad = newwin(10,40, wnd_h/2, wnd_w/2);
             box(sub_pad, ACS_VLINE, ACS_HLINE);
             wmove(sub_pad, 1, 1);
             wbkgd(sub_pad, COLOR_PAIR(2));
@@ -780,7 +789,7 @@ int join_srv_wnd()
             wgetch(subwnd);
             // wclear(sub_pad);
             delwin(sub_pad);
-            prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+elem_h+1, (size.ws_col/2)-(subwnd_w/2)+3, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+            prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+elem_h+1, (size.ws_col/2)-(wnd_w/2)+3, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
         }
         else if (KEY_F(3) == symbol)
 		{
@@ -828,7 +837,7 @@ int join_srv_wnd()
                 if (line <= vis_line)
                     vis_line--;
 
-                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+elem_h+1, (size.ws_col/2)-(subwnd_w/2)+3, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+elem_h+1, (size.ws_col/2)-(wnd_w/2)+3, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
             }
         }
             /* if ARROW_KEY_DOWN is pressed -> navigate in the directory */
@@ -865,7 +874,7 @@ int join_srv_wnd()
                 if ((line + pad_h) <= sizeof(arr))
                     vis_line = line;
 
-                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+elem_h+1, (size.ws_col/2)-(subwnd_w/2)+3, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+elem_h+1, (size.ws_col/2)-(wnd_w/2)+3, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
             }
         }
         else
@@ -914,21 +923,21 @@ int create_srv_wnd()
     // int index;
     int ret = 0;
 
-    int border_h = subwnd_h-2-elem_h-(GFX_ELEM_VOFF*2);
-    int border_w = subwnd_w-2-(GFX_ELEM_HOFF*2);
+    int border_h = wnd_h-2-elem_h-(GFX_ELEM_VOFF*2);
+    int border_w = wnd_w-2-(GFX_ELEM_HOFF*2);
     
-    subwnd = newwin(subwnd_h, subwnd_w, (size.ws_row/2)-(subwnd_h/2), (size.ws_col/2)-(subwnd_w/2));
+    subwnd = newwin(wnd_h, wnd_w, (size.ws_row/2)-(wnd_h/2), (size.ws_col/2)-(wnd_w/2));
     border_wnd = derwin(subwnd, border_h, border_w, 1+GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
     // btns[0] = derwin(border_wnd, 1, (elem_w-2), (border_h-2), 1+GFX_ELEM_HOFF);
     // btns[1] = derwin(border_wnd, 1, (elem_w-2), (border_h-2), 1+GFX_ELEM_HOFF);
-    note_wnd = derwin(subwnd, elem_h, border_w, subwnd_h-1-elem_h, 1+GFX_ELEM_HOFF);
+    note_wnd = derwin(subwnd, elem_h, border_w, wnd_h-1-elem_h, 1+GFX_ELEM_HOFF);
     note_subwnd = derwin(note_wnd, 1, border_w-4, 1, 1);
 
     box(subwnd, ACS_VLINE, ACS_HLINE);
     box(border_wnd, ACS_VLINE, ACS_HLINE);
     box(note_wnd, ' ', ' ');
     
-    wmove(subwnd, 0, (subwnd_w/2)-strlen(CREATE_SCR_LABEL)/2);
+    wmove(subwnd, 0, (wnd_w/2)-strlen(CREATE_SCR_LABEL)/2);
     wprintw(subwnd, CREATE_SCR_LABEL);
 
     wrefresh(subwnd);
@@ -990,8 +999,8 @@ int prefs_wnd()
         '1','2','3','4','5','6','7','8','9','0'//,'q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l',';'
     };
 
-    int border_h = subwnd_h-2-elem_h;
-    int border_w = subwnd_w-2-(GFX_ELEM_HOFF*2);
+    int border_h = wnd_h-2-elem_h;
+    int border_w = wnd_w-2-(GFX_ELEM_HOFF*2);
 
     int pad_h = border_h-2;
     int pad_w = border_w-2;
@@ -999,10 +1008,10 @@ int prefs_wnd()
     int line = 0;
     int vis_line = 0;
 
-    subwnd = newwin(subwnd_h, subwnd_w, (size.ws_row/2)-(subwnd_h/2), (size.ws_col/2)-(subwnd_w/2));
+    subwnd = newwin(wnd_h, wnd_w, (size.ws_row/2)-(wnd_h/2), (size.ws_col/2)-(wnd_w/2));
     pad_border = derwin(subwnd, border_h, border_w, 1+GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
     mainpad = newpad((sizeof(arr)+1) > pad_h ? (sizeof(arr)+1) : pad_h, pad_w);
-    note_wnd = derwin(subwnd, elem_h, border_w, subwnd_h-1-elem_h-GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
+    note_wnd = derwin(subwnd, elem_h, border_w, wnd_h-1-elem_h-GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
     note_subwnd = derwin(note_wnd, 1, border_w-4, 1, 1);
     
 
@@ -1010,9 +1019,9 @@ int prefs_wnd()
     box(pad_border, ACS_VLINE, ACS_HLINE);
     box(note_wnd, ' ', ' ');
 
-    wmove(subwnd, 0, (subwnd_w/2)-strlen(PREFS_SCR_LABEL)/2);
+    wmove(subwnd, 0, (wnd_w/2)-strlen(PREFS_SCR_LABEL)/2);
     wprintw(subwnd, PREFS_SCR_LABEL);
-    // wmove(subwnd, subwnd_h-3, (subwnd_w/2)-strlen(PREFS_SCR_NOTE)/2);
+    // wmove(subwnd, subwnd_h-3, (wnd_w/2)-strlen(PREFS_SCR_NOTE)/2);
     // wprintw(subwnd, PREFS_SCR_NOTE);
     wmove(note_subwnd, 0, ((border_w-4)/2)-(prefs_note_size/2));
     wprintw(note_subwnd, "%s", prefs_note_label);
@@ -1066,7 +1075,7 @@ int prefs_wnd()
     // wbkgd(mainpad, COLOR_PAIR(2));
 
     wrefresh(subwnd);
-    prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+2, (size.ws_col/2)-(subwnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(subwnd_h/2)-5, size.ws_col);
+    prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-5, size.ws_col);
 
     scrollok(mainpad, true);
     keypad(subwnd, true);
@@ -1076,7 +1085,7 @@ int prefs_wnd()
         symbol = wgetch(subwnd);
         if ('\n' == symbol) 
         {
-            WINDOW * sub_pad = newwin(10,40, subwnd_h/2, subwnd_w/2);
+            WINDOW * sub_pad = newwin(10,40, wnd_h/2, wnd_w/2);
             box(sub_pad, ACS_VLINE, ACS_HLINE);
             wmove(sub_pad, 1, 1);
             wbkgd(sub_pad, COLOR_PAIR(2));
@@ -1085,7 +1094,7 @@ int prefs_wnd()
             wgetch(subwnd);
             delwin(sub_pad);
             wrefresh(subwnd);
-            prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+2, (size.ws_col/2)-(subwnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+            prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
         }
         else if (KEY_F(1) == symbol)
 		{
@@ -1132,7 +1141,7 @@ int prefs_wnd()
                 if (line <= vis_line)
                     vis_line--;
 
-                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+2, (size.ws_col/2)-(subwnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
             }
 		}
 		/* if ARROW_KEY_DOWN is pressed -> navigate in the directory */
@@ -1161,7 +1170,7 @@ int prefs_wnd()
                 if ((line + pad_h) <= sizeof(arr))
                     vis_line = line;
                 
-                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(subwnd_h/2)+2, (size.ws_col/2)-(subwnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(subwnd_h/2)-6, size.ws_col);
+                prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
             }
 		}
     }

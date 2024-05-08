@@ -72,13 +72,18 @@
 // #define sz "F3"
 #define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
 
+enum wait_wnd_cond
+{
+    await
+};
+
 /* Global variable, used to store terminal's size in columns and rows */
 extern struct winsize size;
 
 void init_graphics();
 void deinit_graphics();
 
-int wait_wnd(char *);
+int wait_wnd(char *, int);
 
 int menu_wnd();
 

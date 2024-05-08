@@ -10,8 +10,11 @@ struct timeval start_tv = {NULL,NULL};
 struct timeval end_tv = {NULL,NULL};
 int delayMcs = NULL;
 
+pthread_mutex_t recv_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t req_mutex = PTHREAD_MUTEX_INITIALIZER;
 int requests = 0;
+
+int is_connected = 0;
 
 int connect_to_main_server()
 {
@@ -66,8 +69,6 @@ int connect_to_main_server()
 		nanosleep(&ts, NULL);
 	}
 
-    ret += client_send(CONNECT_COMM, WAIT_TRUE, RECV_TIMEOUT);
-
     return ret;
 }
 
@@ -80,7 +81,7 @@ int check_connection_to_main_server()
         ret = client_send(PING_COMM, WAIT_TRUE, RECV_BLOCK);
     }
     else
-        ret = EXIT_FAILURE;
+        return EXIT_FAILURE;
 
     return ret;
 }
@@ -129,6 +130,8 @@ int client_send(int comm, int wait_flag, ...)
 
         break;
     case CONNECT_COMM:
+        if (is_connected)
+            return EXIT_FAILURE;
         // msg.command = comm;
 
         // msg.client_info.client_name = config.name;
@@ -318,23 +321,28 @@ int client_recv(int comm, int mode)
     switch (mode)
     {
     case RECV_BLOCK:
+        pthread_mutex_lock(&recv_mutex);
         if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
         {
             printf("recv: %s(%d)\n", strerror(errno), errno);
+            pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
+        pthread_mutex_unlock(&recv_mutex);
         break;
     case RECV_TIMEOUT:
         struct timespec ts;
         /* Set 'ts' time to define-constants */
         ts.tv_sec = 0;
         ts.tv_nsec = 500000000;
+        pthread_mutex_lock(&recv_mutex);
         for (index = 0; index < 10; ++index)
         {
             if (recv(server_fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
             {
                 if (errno != EAGAIN)
                 {
+                    pthread_mutex_unlock(&recv_mutex);
                     return EXIT_FAILURE;
                 }
             }
@@ -347,18 +355,32 @@ int client_recv(int comm, int mode)
         if (index == (10 - 1))
         {
             printf("recv: %s(%d)\n", strerror(errno), errno);
+            pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
+        pthread_mutex_unlock(&recv_mutex);
         break;
     case RECV_NONBLOCK:
+        if (pthread_mutex_trylock(&recv_mutex) != 0)
+        {
+            if (errno != EBUSY)
+            {
+                printf("recv: %s(%d)\n", strerror(errno), errno);
+                printf("is connected: %d\n", is_connected);
+            }
+            return EXIT_FAILURE;
+        }
         if (recv(server_fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
         {
             if (errno != EAGAIN)
             {
                 printf("recv: %s(%d)\n", strerror(errno), errno);
+                printf("is connected: %d\n", is_connected);
             }
+            pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
+        pthread_mutex_unlock(&recv_mutex);
         break;
     default:
         break;
@@ -408,6 +430,8 @@ int client_recv(int comm, int mode)
         }
         requests ^= CONNECT_REQUEST;
         pthread_mutex_unlock(&req_mutex);
+
+        is_connected = 1;
 
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
@@ -466,6 +490,8 @@ int client_recv(int comm, int mode)
         client_info.client_type = msg.client_info.client_type;
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
+
+        printf("RENAME: %s\n", client_info.client_name);
 
         ret += modify_config_entry(ENTRY_USERNAME, (char *)(client_info.client_name));
 
@@ -534,6 +560,9 @@ int disconnect_from_main_server()
 
     if (server_fd > 0)
         close(server_fd);
+
+    server_fd = 0;
+    is_connected = 0;
 
     return ret;
 }
