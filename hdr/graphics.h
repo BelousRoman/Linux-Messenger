@@ -14,6 +14,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <malloc.h>
+#include <signal.h>
+#include <mqueue.h>
+#include "network.h"
 
 #define GFX_ELEM_VOFF                   0
 #define GFX_ELEM_HOFF                   1
@@ -48,7 +51,10 @@
 
 #define MENU_SCR_LABEL                  "Welcome to Linux Messenger"
 #define MENU_SCR_NOTE_LABEL             "Shortcuts:"
-#define MENU_SCR_NOTE                   "F1: Help\tF4: Quit"
+// #define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF4: Quit"
+// #define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF4: Quit"
+#define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF2: Reconnect\tF3: Disconnect\tF4: Quit"
+#define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF2: Connect\tF3: Change address\tF4: Quit"
 #define MENU_SCR_CLT_BTN_LABEL          "Join server"
 #define MENU_SCR_SRV_BTN_LABEL          "Create a server"
 #define MENU_SCR_CFG_BTN_LABEL          "Configuration"
@@ -77,15 +83,19 @@ enum wait_wnd_cond
     await
 };
 
+extern int connection_flag;
+
 /* Global variable, used to store terminal's size in columns and rows */
 extern struct winsize size;
 
 void init_graphics();
 void deinit_graphics();
 
+void handle_msg(union sigval);
+
 int wait_wnd(char *, int);
 
-int menu_wnd();
+int menu_wnd(int *);
 
 int join_srv_wnd();
 int create_srv_wnd();

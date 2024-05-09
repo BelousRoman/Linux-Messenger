@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -26,14 +27,12 @@
 #define NET_SYSTEM_ERR                  2
 #define NET_SOFTWARE_ERR                1
 
-#define PING_REQUEST                    (1 << 0)
-#define CONNECT_REQUEST                 (1 << 1)
-#define JOIN_REQUEST                    (1 << 2)
-#define CREATE_REQUEST                  (1 << 3)
-#define RENAME_REQUEST                  (1 << 4)
-#define DISCONNECT_REQUEST              (1 << 5)
-#define SHUT_ROOM_REQUEST               (1 << 6)
-#define SHUT_SRV_REQUEST                (1 << 7)
+enum connection_status
+{
+    STATUS_DISCONNECTED,
+    STATUS_CONNECTED,
+    STATUS_CONNECTING
+};
 
 enum client_types
 {
@@ -131,12 +130,24 @@ struct client_msg_t
     };
 };
 
+struct requests_t
+{
+    atomic_uchar ping_req;
+    atomic_uchar connect_req;
+    atomic_uchar join_req;
+    atomic_uchar create_req;
+    atomic_uchar rename_req;
+    atomic_uchar disconnect_req;
+    atomic_uchar shut_room_req;
+    atomic_uchar shut_serv_req;
+};
+
 extern struct config_t config;
 
 int main_server();
 
-int connect_to_main_server();
-int check_connection_to_main_server();
+int connect_to_main_server(int *);
+int is_connected(void);
 int get_latency();
 int client_send(int comm, int wait_flag, ...);
 int client_recv(int comm, int mode);

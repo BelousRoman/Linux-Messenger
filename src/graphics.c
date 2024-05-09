@@ -7,8 +7,21 @@
 #define SUBWND_MIN_W        (elem_w+2+PANEL_MIN_W+(GFX_ELEM_HOFF*5)) > header_w ? \
                             (elem_w+2+PANEL_MIN_W+(GFX_ELEM_HOFF*5)) : header_w
 
+enum cur_wnd_enum
+{
+    WND_NONE = 0,
+    WND_MAIN_MENU,
+    WND_JOIN_SRV,
+    WND_CREATE_SRV,
+    WND_PREFS
+};
+
 /* Global variable, used to store terminal's size in columns and rows */
 struct winsize size;
+
+int cur_wnd = WND_NONE;
+WINDOW *status_subwnd = NULL;
+WINDOW *note_subwnd = NULL;
 
 int wnd_h;
 int wnd_w;
@@ -36,6 +49,105 @@ void sig_winch(int signo)
 {
 	ioctl(fileno(stdout), TIOCGWINSZ, (char *) &size);
 	resizeterm(size.ws_row, size.ws_col);
+}
+
+/* Function to handle message when new message in queue occurs */
+void handle_msg(union sigval sv)
+{
+    /*
+    * Declare:
+    * - sev - sigevent, to repeatedly recall mq_notify;
+    * - prio - prioirity of received message;
+    * - ret - return value.
+    */
+	mqd_t *mqd = ((mqd_t *) sv.sival_ptr);
+    struct sigevent sev;
+    int msg;
+    ssize_t ret;
+    /*
+    * Configure sigevent, set notification method, function called, attributes
+    * and pointer to q_handler.
+    * */
+	sev.sigev_notify = SIGEV_THREAD;
+	sev.sigev_notify_function = handle_msg;
+	sev.sigev_notify_attributes = NULL;
+	sev.sigev_value.sival_ptr = mqd;
+
+    /* Read queue until an error occurs */
+	while (ret = mq_receive(*mqd, &msg, sizeof(int),
+                        NULL) > 0)
+	{
+		switch (msg)
+        {
+        case CONNECT_COMM:
+            if (cur_wnd == WND_MAIN_MENU)
+            {
+                wclear(status_subwnd);
+                wmove(status_subwnd, 0, 0);
+                switch (connection_flag)
+                {
+                case STATUS_DISCONNECTED:
+                    wattron(status_subwnd, COLOR_PAIR(5));
+                    waddch(status_subwnd, ACS_DIAMOND);
+                    wattroff(status_subwnd, COLOR_PAIR(5));
+                    wprintw(status_subwnd, " Status: ");
+                    wattron(status_subwnd, COLOR_PAIR(5));
+                    wprintw(status_subwnd, "Connected");
+                    wattroff(status_subwnd, COLOR_PAIR(5));
+
+                    wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
+                    wprintw(note_subwnd, MENU_SCR_NOTE_DISCONNECTED);
+                    break;
+                case STATUS_CONNECTED:
+                    wattron(status_subwnd, COLOR_PAIR(4));
+                    waddch(status_subwnd, ACS_DIAMOND);
+                    wattroff(status_subwnd, COLOR_PAIR(4));
+                    wprintw(status_subwnd, " Status: ");
+                    wattron(status_subwnd, COLOR_PAIR(4));
+                    wprintw(status_subwnd, "Disconnected");
+                    wattroff(status_subwnd, COLOR_PAIR(4));
+
+                    wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_CONNECTED)/2);
+                    wprintw(note_subwnd, MENU_SCR_NOTE_CONNECTED);
+                    break;
+                case STATUS_CONNECTING:
+                    wattron(status_subwnd, COLOR_PAIR(3));
+                    waddch(status_subwnd, ACS_DIAMOND);
+                    wattroff(status_subwnd, COLOR_PAIR(3));
+                    wprintw(status_subwnd, " Status: ");
+                    wattron(status_subwnd, A_BLINK | COLOR_PAIR(3));
+                    wprintw(status_subwnd, "Connecting");
+                    wattroff(status_subwnd, A_BLINK | COLOR_PAIR(3));
+
+                    wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
+                    wprintw(note_subwnd, MENU_SCR_NOTE_DISCONNECTED);
+                    break;
+                default:
+                    break;
+                }
+                
+            }
+            break;
+        default:
+            break;
+        }
+	}
+    if (ret == -1)
+    {
+		if (errno != EAGAIN)
+		{
+			perror("handle_msg mq_receive");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+    /* Register mq_notify */
+	while (ret = mq_notify(*mqd, &sev) == -1)
+	{
+		perror("mq_notify");
+		exit(EXIT_FAILURE);
+	}
+	return EXIT_SUCCESS;
 }
 
 int _set_dimensions()
@@ -188,6 +300,8 @@ void init_graphics()
 	init_pair(1, COLOR_WHITE, COLOR_BLACK); /* Init color pair for a usual color palette */
 	init_pair(2, COLOR_BLACK, COLOR_WHITE); /* Init color pair for a 'selected' color palette */
     init_pair(3, COLOR_YELLOW, COLOR_BLACK); /* Init color pair for a 'selected' color palette */
+    init_pair(4, COLOR_RED, COLOR_BLACK); /* Init color pair for a 'selected' color palette */
+    init_pair(5, COLOR_GREEN, COLOR_BLACK); /* Init color pair for a 'selected' color palette */
     
     //init_pair(3, COLOR_BLUE, COLOR_MAGENTA); /* Init color pair for a 'selected' color palette */
 	bkgd(COLOR_PAIR(1)); /* Set background color to usual color palette */
@@ -262,23 +376,23 @@ int wait_wnd(char *str, int type)
     return ret;
 }
 
-int menu_wnd()
+int menu_wnd(int *option)
 {
     WINDOW *subwnd;
     WINDOW *header_wnd;
     WINDOW *status_wnd;
-    WINDOW *status_subwnd;
     WINDOW *btns_border;
     WINDOW *btns[4];
     WINDOW *note_wnd;
-    WINDOW *note_subwnd;
     WINDOW *panel_wnd;
 
     char *labels[4];
     int symbol;
     int index;
-    int selection = 0;
+    int selection = *option-1;
     int ret = 0;
+
+    cur_wnd = WND_MAIN_MENU;
 
     int border_h = (elem_h*4)+2+(GFX_ELEM_VOFF*5);
     int border_w = elem_w+2+(GFX_ELEM_HOFF*2);
@@ -325,7 +439,6 @@ int menu_wnd()
     wmove(btns[1], 1, (elem_w/2)-strlen(labels[1])/2);
     wmove(btns[2], 1, (elem_w/2)-strlen(labels[2])/2);
     wmove(btns[3], 1, (elem_w/2)-strlen(labels[3])/2);
-    wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE)/2);
 
     wprintw(subwnd, MENU_SCR_LABEL);
     wprintw(header_wnd,
@@ -335,22 +448,57 @@ int menu_wnd()
             "  \\ \\/  \\/ / _ \\ |/ __/ _ \\| '_ ` _ \\ / _ \\\n" \
             "   \\  /\\  /  __/ | (_| (_) | | | | | |  __/\n" \
             "    \\/  \\/ \\___|_|\\___\\___/|_| |_| |_|\\___|\n");
-    
-    wattron(status_subwnd, COLOR_PAIR(3));
-    waddch(status_subwnd, ACS_DIAMOND);
-    wattroff(status_subwnd, COLOR_PAIR(3));
-    wprintw(status_subwnd, " Status: ");
-    wattron(status_subwnd, A_BLINK | COLOR_PAIR(3));
-    wprintw(status_subwnd, "Connecting");
-    wattroff(status_subwnd, A_BLINK | COLOR_PAIR(3));
-    wprintw(note_subwnd, MENU_SCR_NOTE);
-    wprintw(panel_wnd, MENU_SCR_NOTE_LABEL"\n"MENU_SCR_NOTE);
+
+    switch (connection_flag)
+    {
+    case STATUS_DISCONNECTED:
+        wattron(status_subwnd, COLOR_PAIR(4));
+        waddch(status_subwnd, ACS_DIAMOND);
+        wattroff(status_subwnd, COLOR_PAIR(4));
+        wprintw(status_subwnd, " Status: ");
+        wattron(status_subwnd, COLOR_PAIR(4));
+        wprintw(status_subwnd, "Disconnected");
+        wattroff(status_subwnd, COLOR_PAIR(4));
+
+        wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
+        wprintw(note_subwnd, MENU_SCR_NOTE_DISCONNECTED);
+        break;
+    case STATUS_CONNECTED:
+        wattron(status_subwnd, COLOR_PAIR(5));
+        waddch(status_subwnd, ACS_DIAMOND);
+        wattroff(status_subwnd, COLOR_PAIR(5));
+        wprintw(status_subwnd, " Status: ");
+        wattron(status_subwnd, COLOR_PAIR(5));
+        wprintw(status_subwnd, "Connected");
+        wattroff(status_subwnd, COLOR_PAIR(5));
+
+        wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_CONNECTED)/2);
+        wprintw(note_subwnd, MENU_SCR_NOTE_CONNECTED);
+        break;
+    case STATUS_CONNECTING:
+        wattron(status_subwnd, COLOR_PAIR(3));
+        waddch(status_subwnd, ACS_DIAMOND);
+        wattroff(status_subwnd, COLOR_PAIR(3));
+        wprintw(status_subwnd, " Status: ");
+        wattron(status_subwnd, A_BLINK | COLOR_PAIR(3));
+        wprintw(status_subwnd, "Connecting");
+        wattroff(status_subwnd, A_BLINK | COLOR_PAIR(3));
+
+        wmove(note_subwnd, 0, ((wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
+        wprintw(note_subwnd, MENU_SCR_NOTE_DISCONNECTED);
+        break;
+    default:
+        break;
+    }
+
+    wprintw(panel_wnd, MENU_SCR_NOTE_LABEL);
     // for (int i = 0; i < 43;i++)
     // {
         // waddch(note_wnd, arr[i]);
         // waddch(note_wnd, ' ');
     // }
     // wbkgd(panel_wnd, COLOR_PAIR(2));
+    {
     wprintw(panel_wnd, "\n1: ");
     waddch(panel_wnd, ACS_BBSS);
     wprintw(panel_wnd, " 2: ");
@@ -437,17 +585,23 @@ int menu_wnd()
     waddch(panel_wnd, ACS_URCORNER);
     wprintw(panel_wnd, " 43: ");
     waddch(panel_wnd, ACS_VLINE);
+    }
 
                     // for (index = 0; index < 4; ++index)
                     // {
 // Writing buttons will go there
                     // }
-    wattron(btns[0], A_BOLD | A_UNDERLINE);
-    wprintw(btns[0], "%s", labels[0]);
-    wattroff(btns[0], A_BOLD | A_UNDERLINE);
-    wprintw(btns[1], "%s", labels[1]);
-    wprintw(btns[2], "%s", labels[2]);
-    wprintw(btns[3], "%s", labels[3]);
+    for (index = 0; index < 4; ++index)
+    {
+        if (index == (*option-1))
+        {
+            wattron(btns[index], A_BOLD | A_UNDERLINE);
+            wprintw(btns[index], "%s", labels[index]);
+            wattroff(btns[index], A_BOLD | A_UNDERLINE);
+        }
+        else
+            wprintw(btns[index], "%s", labels[index]);
+    }
 
     // wbkgd(panel_wnd, COLOR_PAIR(2));
     // wbkgd(note_subwnd, COLOR_PAIR(2));
@@ -523,16 +677,12 @@ int menu_wnd()
             switch (selection)
             {
             case 0:
-                ret = 1;
-                break;
             case 1:
-                ret = 2;
-                break;
             case 2:
-                ret = 3;
+                *option = selection+1;
                 break;
             case 3:
-                ret = 0;
+                *option = 0;
                 break;
             default:
                 break;
@@ -543,10 +693,12 @@ int menu_wnd()
 		/* If F3 is pressed -> exit application */
 		else if (KEY_F(4) == symbol)
 		{
-            ret = 0;
+            *option = 0;
 			break;
 		}
 	}
+
+    cur_wnd = WND_NONE;
 
     for (index = 0; index < 4; ++index)
     {
@@ -554,8 +706,17 @@ int menu_wnd()
             free(labels[index]);
         delwin(btns[index]);
     }
+    delwin(status_subwnd);
+    delwin(status_wnd);
+    delwin(btns_border);
+    delwin(note_subwnd);
+    delwin(note_wnd);
     delwin(panel_wnd);
+    delwin(header_wnd);
     delwin(subwnd);
+
+    status_subwnd = NULL;
+    note_subwnd = NULL;
 
     return ret;
 }

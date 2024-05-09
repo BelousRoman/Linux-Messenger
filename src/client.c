@@ -11,12 +11,20 @@ struct timeval end_tv = {NULL,NULL};
 int delayMcs = NULL;
 
 pthread_mutex_t recv_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t req_mutex = PTHREAD_MUTEX_INITIALIZER;
-int requests = 0;
+struct requests_t requests = {
+    .ping_req = 0,
+    .connect_req = 0,
+    .join_req = 0,
+    .create_req = 0,
+    .rename_req = 0,
+    .disconnect_req = 0,
+    .shut_room_req = 0,
+    .shut_serv_req = 0
+};
 
-int is_connected = 0;
+int connection_flag = STATUS_DISCONNECTED;
 
-int connect_to_main_server()
+int connect_to_main_server(int *fd)
 {
     struct client_msg_t msg;
 	struct timespec ts;
@@ -69,21 +77,14 @@ int connect_to_main_server()
 		nanosleep(&ts, NULL);
 	}
 
+    *fd = server_fd;
+
     return ret;
 }
 
-int check_connection_to_main_server()
+int is_connected(void)
 {
-    int ret = EXIT_SUCCESS;
-    
-    if (server_fd > 0)
-    {
-        ret = client_send(PING_COMM, WAIT_TRUE, RECV_BLOCK);
-    }
-    else
-        return EXIT_FAILURE;
-
-    return ret;
+    return connection_flag;
 }
 
 int get_latency()
@@ -124,25 +125,21 @@ int client_send(int comm, int wait_flag, ...)
             }
         }
 
-        pthread_mutex_lock(&req_mutex);
-        requests |= PING_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.ping_req++;
 
         break;
     case CONNECT_COMM:
-        if (is_connected)
+        if (connection_flag != STATUS_DISCONNECTED)
             return EXIT_FAILURE;
-        // msg.command = comm;
+        connection_flag = STATUS_CONNECTING;
+        alarm(5);
 
-        // msg.client_info.client_name = config.name;
         strncpy(msg.client_info.client_name, config.name, sizeof(msg.client_info.client_name));
         msg.client_info.client_type = TYPE_NONE;
         msg.client_info.cur_server = NULL;
         msg.client_info.id = config.id;
 
-        pthread_mutex_lock(&req_mutex);
-        requests |= CONNECT_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.connect_req++;
 
         break;
     case JOIN_COMM:
@@ -162,9 +159,7 @@ int client_send(int comm, int wait_flag, ...)
             strncpy(msg.join_srv.ip, ip, sizeof(msg.join_srv.ip));
             msg.join_srv.port = (unsigned short)port;
 
-            pthread_mutex_lock(&req_mutex);
-            requests |= JOIN_REQUEST;
-            pthread_mutex_unlock(&req_mutex);
+            requests.join_req++;
         }
         else
             ret = EXIT_FAILURE;
@@ -188,9 +183,7 @@ int client_send(int comm, int wait_flag, ...)
             strncpy(msg.server_info.ip, ip, sizeof(msg.server_info.ip));
             msg.server_info.port = (unsigned short)port;
 
-            pthread_mutex_lock(&req_mutex);
-            requests |= CREATE_REQUEST;
-            pthread_mutex_unlock(&req_mutex);
+            requests.create_req++;
         }
         else
             ret = EXIT_FAILURE;
@@ -209,9 +202,7 @@ int client_send(int comm, int wait_flag, ...)
             msg.client_info.cur_server = client_info.cur_server;
             msg.client_info.id = client_info.id;
 
-            pthread_mutex_lock(&req_mutex);
-            requests |= RENAME_REQUEST;
-            pthread_mutex_unlock(&req_mutex);
+            requests.rename_req++;
         }
         else
             ret = EXIT_FAILURE;
@@ -227,9 +218,7 @@ int client_send(int comm, int wait_flag, ...)
             msg.client_info.cur_server = client_info.cur_server;
             msg.client_info.id = client_info.id;
 
-            pthread_mutex_lock(&req_mutex);
-            requests |= DISCONNECT_REQUEST;
-            pthread_mutex_unlock(&req_mutex);
+            requests.disconnect_req++;
         }
         else
             ret = EXIT_FAILURE;
@@ -260,9 +249,7 @@ int client_send(int comm, int wait_flag, ...)
             strncpy(msg.server_info.ip, server_info.ip, sizeof(msg.server_info.ip));
             msg.server_info.port = server_info.port;
 
-            pthread_mutex_lock(&req_mutex);
-            requests |= SHUT_ROOM_REQUEST;
-            pthread_mutex_unlock(&req_mutex);
+            requests.shut_room_req++;
         }
         else
             ret = EXIT_FAILURE;
@@ -272,9 +259,7 @@ int client_send(int comm, int wait_flag, ...)
         {
             // msg.command = comm;
 
-            pthread_mutex_lock(&req_mutex);
-            requests |= SHUT_SRV_REQUEST;
-            pthread_mutex_unlock(&req_mutex);
+            requests.shut_serv_req++;
         }
         else
             ret = EXIT_FAILURE;
@@ -342,6 +327,7 @@ int client_recv(int comm, int mode)
             {
                 if (errno != EAGAIN)
                 {
+                    printf("recv: %s(%d)\n", strerror(errno), errno);
                     pthread_mutex_unlock(&recv_mutex);
                     return EXIT_FAILURE;
                 }
@@ -366,7 +352,7 @@ int client_recv(int comm, int mode)
             if (errno != EBUSY)
             {
                 printf("recv: %s(%d)\n", strerror(errno), errno);
-                printf("is connected: %d\n", is_connected);
+                printf("is connected: %d\n", connection_flag);
             }
             return EXIT_FAILURE;
         }
@@ -375,7 +361,7 @@ int client_recv(int comm, int mode)
             if (errno != EAGAIN)
             {
                 printf("recv: %s(%d)\n", strerror(errno), errno);
-                printf("is connected: %d\n", is_connected);
+                printf("is connected: %d\n", connection_flag);
             }
             pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
@@ -395,15 +381,12 @@ int client_recv(int comm, int mode)
     switch (msg.command.id)
     {
     case PING_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != PING_COMM) || !(requests & PING_REQUEST))
+        if ((comm != NULL && comm != PING_COMM) || requests.ping_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= PING_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.ping_req--;
 
         if (start_tv.tv_sec != NULL)
         {
@@ -421,17 +404,20 @@ int client_recv(int comm, int mode)
         }
         break;
     case CONNECT_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != CONNECT_COMM) || !(requests & CONNECT_REQUEST))
+        if ((comm != NULL && comm != CONNECT_COMM) || requests.connect_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= CONNECT_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.connect_req--;
 
-        is_connected = 1;
+        alarm(0);
+        connection_flag = STATUS_CONNECTED;
+        if (kill(getpid(), SIGALRM) != 0)
+        {
+            perror("kill");
+            exit(EXIT_FAILURE);
+        }
 
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
@@ -444,15 +430,12 @@ int client_recv(int comm, int mode)
         ret += update_json_file();
         break;
     case JOIN_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != JOIN_COMM) || !(requests & JOIN_REQUEST))
+        if ((comm != NULL && comm != JOIN_COMM) || requests.join_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= JOIN_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.join_req--;
 
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
@@ -460,15 +443,12 @@ int client_recv(int comm, int mode)
         client_info.id = msg.client_info.id;
         break;
     case CREATE_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != CREATE_COMM) || !(requests & CREATE_REQUEST))
+        if ((comm != NULL && comm != CREATE_COMM) || requests.create_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= CREATE_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.create_req--;
 
         server_info.host_id = msg.server_info.host_id;
         strncpy(server_info.server_name, msg.server_info.server_name, sizeof(server_info.server_name));
@@ -476,37 +456,31 @@ int client_recv(int comm, int mode)
         server_info.port = msg.server_info.port;
         break;
     case RENAME_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != RENAME_COMM) || !(requests & RENAME_REQUEST))
+        if ((comm != NULL && comm != RENAME_COMM) || requests.rename_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= RENAME_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.rename_req--;
 
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
         client_info.cur_server = msg.client_info.cur_server;
         client_info.id = msg.client_info.id;
 
-        printf("RENAME: %s\n", client_info.client_name);
+        // printf("RENAME: %s\n", client_info.client_name);
 
         ret += modify_config_entry(ENTRY_USERNAME, (char *)(client_info.client_name));
 
         ret += update_json_file();
         break;
     case DISCONNECT_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != DISCONNECT_COMM) || !(requests & DISCONNECT_REQUEST))
+        if ((comm != NULL && comm != DISCONNECT_COMM) || requests.disconnect_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= DISCONNECT_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.disconnect_req--;
         break;
     case CLIENT_QUIT_COMM:
         if (comm != NULL && comm != CLIENT_QUIT_COMM)
@@ -516,15 +490,12 @@ int client_recv(int comm, int mode)
         }
         break;
     case SHUT_ROOM_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != SHUT_ROOM_COMM) || !(requests & SHUT_ROOM_REQUEST))
+        if ((comm != NULL && comm != SHUT_ROOM_COMM) || requests.shut_room_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= SHUT_ROOM_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.shut_room_req--;
 
         strncpy(client_info.client_name, msg.client_info.client_name, sizeof(client_info.client_name));
         client_info.client_type = msg.client_info.client_type;
@@ -532,15 +503,12 @@ int client_recv(int comm, int mode)
         client_info.id = msg.client_info.id;
         break;
     case SHUT_SRV_COMM:
-        pthread_mutex_lock(&req_mutex);
-        if ((comm != NULL && comm != SHUT_SRV_COMM) || !(requests & SHUT_SRV_REQUEST))
+        if ((comm != NULL && comm != SHUT_SRV_COMM) || requests.shut_serv_req <= 0)
         {
-            pthread_mutex_unlock(&req_mutex);
             ret = EXIT_FAILURE;
             break;
         }
-        requests ^= SHUT_SRV_REQUEST;
-        pthread_mutex_unlock(&req_mutex);
+        requests.shut_serv_req--;
 
         disconnect_from_main_server();
         break;
@@ -562,7 +530,12 @@ int disconnect_from_main_server()
         close(server_fd);
 
     server_fd = 0;
-    is_connected = 0;
+    connection_flag = STATUS_DISCONNECTED;
+    if (kill(getpid(), SIGALRM) != 0)
+    {
+        perror("kill");
+        exit(EXIT_FAILURE);
+    }
 
     return ret;
 }
