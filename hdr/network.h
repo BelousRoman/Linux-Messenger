@@ -146,7 +146,7 @@ extern struct config_t config;
 
 int main_server();
 
-int connect_to_main_server(int *);
+int connect_to_main_server();
 int is_connected(void);
 int get_latency();
 int client_send(int comm, int wait_flag, ...);

@@ -11,8 +11,9 @@
 
 extern struct config_t config;
 extern int connection_flag;
+extern struct pollfd pfd;
 mqd_t mqd = 0;
-struct pollfd pfd = {0,0,0};
+int mq_comm = 0;
 
 float latency = 0;
 
@@ -22,14 +23,34 @@ static void sigalrm_handler(int sig, siginfo_t *si, void *unused)
     {
     case STATUS_CONNECTING:
         connection_flag = STATUS_DISCONNECTED;
-        if (mqd > 0)
-        {
-            mq_send(mqd, (int)CONNECT_COMM, sizeof(int), NULL);
-        }
         break;
     default:
         break;
     }
+    if (mqd > 0)
+    {
+        mq_comm = CONNECT_COMM;
+        mq_send(mqd, &mq_comm, sizeof(int), NULL);
+    }
+    return;
+}
+
+static void sigusr1_handler(int sig, siginfo_t *si, void *unused)
+{
+    switch (connection_flag)
+    {
+    case STATUS_CONNECTING:
+        connection_flag = STATUS_DISCONNECTED;
+        break;
+    default:
+        break;
+    }
+    if (mqd > 0)
+    {
+        mq_comm = CONNECT_COMM;
+        mq_send(mqd, &mq_comm, sizeof(int), NULL);
+    }
+    return;
 }
 
 void *_net_thread(void *args)
@@ -55,21 +76,37 @@ void *_net_thread(void *args)
     {
         switch (connection_flag)
         {
-        case 1:
+        case STATUS_CONNECTED:
             if (poll(&pfd, 1, 0) > 0)
             {
                 if (pfd.revents & POLLIN)
                 {
                     if (client_recv(NULL, RECV_TIMEOUT) != 0)
                     {
+                        popup_wnd(strerror(errno), POPUP_W_WAIT);
                         connection_flag = STATUS_DISCONNECTED;
-                        wait_wnd(strerror(errno), 1);
-                        // TODO Add dynamic status change on window upon losing connection with main server
-                        if (kill(getpid(), SIGALRM) != 0)
+                        if (errno == ECONNRESET)
                         {
-                            perror("kill");
-                            exit(EXIT_FAILURE);
+                            connection_flag = STATUS_DISCONNECTED;
+                            // popup_wnd(strerror(errno), POPUP_W_WAIT);
+                            // TODO Add dynamic status change on window upon losing connection with main server
+                            mq_comm = CONNECT_COMM;
+                            mq_send(mqd, &mq_comm, sizeof(int), NULL);
+                            
                         }
+                        // switch (is_connected())
+                        // {
+                        // case STATUS_DISCONNECTED:
+                        //     if (kill(getpid(), SIGUSR1) != 0)
+                        //     {
+                        //         perror("kill");
+                        //         exit(EXIT_FAILURE);
+                        //     }
+                        //     break;
+                        // default:
+                        //     break;
+                        // }
+                        
                     }
                 }
                 pfd.revents = 0;
@@ -90,10 +127,23 @@ int main(void)
     struct sigevent sev;
     int option = 1;
     int ret = EXIT_SUCCESS;
-
-    sigemptyset(&sa.sa_mask);
+    init_graphics();
+    menu_wnd(&option);
+    join_srv_wnd(&option);
+    create_srv_wnd();
+    deinit_graphics();
+    return 0;
+    sigfillset(&sa.sa_mask);
     sa.sa_sigaction = sigalrm_handler;
     if (sigaction(SIGALRM, &sa, NULL) == -1)
+    {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    sigfillset(&sa.sa_mask);
+    sa.sa_sigaction = sigusr1_handler;
+    if (sigaction(SIGUSR1, &sa, NULL) == -1)
     {
         perror("sigaction");
         exit(EXIT_FAILURE);
@@ -103,10 +153,11 @@ int main(void)
 
     read_config();
 
-    connect_to_main_server(&pfd.fd);
+    connect_to_main_server();
     client_send(CONNECT_COMM, WAIT_TRUE, RECV_TIMEOUT);
 
     snprintf(mq_name, 22, "/client%d_ntg", config.id);
+    mq_unlink(mq_name);
     attr.mq_maxmsg = 5;
 	attr.mq_msgsize = sizeof(int);
     
@@ -120,7 +171,7 @@ int main(void)
     sev.sigev_notify = SIGEV_THREAD;
 	sev.sigev_notify_function = handle_msg;
 	sev.sigev_notify_attributes = NULL;
-	sev.sigev_value.sival_ptr = &mqd;
+	sev.sigev_value.sival_int = mqd;
 
     if (mq_notify(mqd, &sev) == -1)
 	{
@@ -130,7 +181,10 @@ int main(void)
 
     init_graphics();
 
-    // wait_wnd(mq_name, 1);
+    // popup_wnd(mq_name, 1);
+    // char ch[11];
+    // snprintf(ch, 10, "%d", mqd);
+    // popup_wnd(ch, 1);
 
     pthread_create(&tid, NULL, _net_thread, NULL);
     ret = 1;
@@ -142,25 +196,25 @@ int main(void)
             case 1:
                 if (connection_flag)
                 {
-                    ret = join_srv_wnd();
+                    ret = join_srv_wnd(&option);
                 }
                 else
                 {
-                    wait_wnd("Not connected", 1);
+                    popup_wnd("Not connected", POPUP_W_WAIT);
                 }
                 break;
             case 2:
                 if (connection_flag)
                 {
-                    ret = create_srv_wnd();
+                    // ret = create_srv_wnd();
                 }
                 else
                 {
-                    wait_wnd("Not connected", 1);
+                    popup_wnd("Not connected", POPUP_W_WAIT);
                 }
                 break;
             case 3:
-                ret = prefs_wnd();
+                // ret = prefs_wnd();
                 break;
             case -1:
                 /* code */
@@ -169,12 +223,12 @@ int main(void)
                 break;
         }
     }
-
-    deinit_graphics();
     
     pthread_cancel(tid);
 
     ret += disconnect_from_main_server();
+    
+    deinit_graphics();
     
     printf("User#%d \"%s\" disconnected, latency = %g ms\n", config.id, config.name, latency);
 

@@ -4,7 +4,7 @@ struct client_info_t client_info;
 struct server_info_t server_info;
 
 struct sockaddr_in server;
-int server_fd = NULL;
+struct pollfd pfd = {0,0,0};
 
 struct timeval start_tv = {NULL,NULL};
 struct timeval end_tv = {NULL,NULL};
@@ -51,8 +51,8 @@ int connect_to_main_server(int *fd)
     // printf("Server addr: %s : %d\n", config.ip, config.port);
 
 	/* Create socket */
-	server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0)
+	pfd.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (pfd.fd < 0)
     {
         printf("socket: %s(%d)\n", strerror(errno), errno);
         return EXIT_FAILURE;
@@ -60,7 +60,7 @@ int connect_to_main_server(int *fd)
 
 	for (index = 0; index < 10; ++index)
 	{
-		if (connect(server_fd, (struct sockaddr *)&server, sizeof(server))
+		if (connect(pfd.fd, (struct sockaddr *)&server, sizeof(server))
 			== -1)
 		{
             printf("connect: %s(%d)\n", strerror(errno), errno);
@@ -76,8 +76,6 @@ int connect_to_main_server(int *fd)
 		}
 		nanosleep(&ts, NULL);
 	}
-
-    *fd = server_fd;
 
     return ret;
 }
@@ -271,7 +269,7 @@ int client_send(int comm, int wait_flag, ...)
 
     if (ret == EXIT_SUCCESS)
     {
-        if (send(server_fd, &msg, sizeof(msg), 0) == -1)
+        if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
         {
             printf("send: %s(%d)\n", strerror(errno), errno);
             ret = EXIT_FAILURE;
@@ -298,7 +296,7 @@ int client_recv(int comm, int mode)
 
     memset(&msg, NULL, sizeof(msg));
 
-    if (server_fd <= 0)
+    if (pfd.fd <= 0)
     {
         return EXIT_FAILURE;
     }
@@ -307,9 +305,9 @@ int client_recv(int comm, int mode)
     {
     case RECV_BLOCK:
         pthread_mutex_lock(&recv_mutex);
-        if (recv(server_fd, &msg, sizeof(msg), 0) == -1)
+        if (recv(pfd.fd, &msg, sizeof(msg), 0) == -1)
         {
-            printf("recv: %s(%d)\n", strerror(errno), errno);
+            printf("1 recv: %d %s(%d)\n", comm, strerror(errno), errno);
             pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
@@ -319,15 +317,15 @@ int client_recv(int comm, int mode)
         struct timespec ts;
         /* Set 'ts' time to define-constants */
         ts.tv_sec = 0;
-        ts.tv_nsec = 500000000;
+        ts.tv_nsec = 100000000;
         pthread_mutex_lock(&recv_mutex);
         for (index = 0; index < 10; ++index)
         {
-            if (recv(server_fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
+            if (recv(pfd.fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
             {
                 if (errno != EAGAIN)
                 {
-                    printf("recv: %s(%d)\n", strerror(errno), errno);
+                    printf("2 recv %d: %s(%d)\n", comm, strerror(errno), errno);
                     pthread_mutex_unlock(&recv_mutex);
                     return EXIT_FAILURE;
                 }
@@ -340,7 +338,7 @@ int client_recv(int comm, int mode)
         }
         if (index == (10 - 1))
         {
-            printf("recv: %s(%d)\n", strerror(errno), errno);
+            printf("3 recv %d: %s(%d)\n", comm, strerror(errno), errno);
             pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
@@ -351,16 +349,16 @@ int client_recv(int comm, int mode)
         {
             if (errno != EBUSY)
             {
-                printf("recv: %s(%d)\n", strerror(errno), errno);
+                printf("4 recv %d: %s(%d)\n", comm, strerror(errno), errno);
                 printf("is connected: %d\n", connection_flag);
             }
             return EXIT_FAILURE;
         }
-        if (recv(server_fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
+        if (recv(pfd.fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
         {
             if (errno != EAGAIN)
             {
-                printf("recv: %s(%d)\n", strerror(errno), errno);
+                printf("5 recv %d: %s(%d)\n", comm, strerror(errno), errno);
                 printf("is connected: %d\n", connection_flag);
             }
             pthread_mutex_unlock(&recv_mutex);
@@ -413,7 +411,7 @@ int client_recv(int comm, int mode)
 
         alarm(0);
         connection_flag = STATUS_CONNECTED;
-        if (kill(getpid(), SIGALRM) != 0)
+        if (kill(getpid(), SIGUSR1) != 0)
         {
             perror("kill");
             exit(EXIT_FAILURE);
@@ -526,12 +524,17 @@ int disconnect_from_main_server()
 
     ret = client_send(CLIENT_QUIT_COMM, WAIT_TRUE, RECV_BLOCK);
 
-    if (server_fd > 0)
-        close(server_fd);
-
-    server_fd = 0;
     connection_flag = STATUS_DISCONNECTED;
-    if (kill(getpid(), SIGALRM) != 0)
+
+    if (pfd.fd > 0)
+    {
+        pthread_mutex_lock(&recv_mutex);
+        close(pfd.fd);
+        pfd.fd = 0;
+        pthread_mutex_unlock(&recv_mutex);
+    }
+
+    if (kill(getpid(), SIGUSR1) != 0)
     {
         perror("kill");
         exit(EXIT_FAILURE);
