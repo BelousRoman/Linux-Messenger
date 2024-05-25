@@ -129,7 +129,9 @@ int main(void)
     int ret = EXIT_SUCCESS;
     init_graphics();
     menu_wnd(&option);
+    option = 1;
     join_srv_wnd(&option);
+    option = 1;
     create_srv_wnd();
     deinit_graphics();
     return 0;

@@ -1,14 +1,7 @@
 #include "../hdr/graphics.h"
 
-// #define SUBWND_MIN_H        (elem_h*4)+2+(GFX_ELEM_VOFF*7)
-// #define SUBWND_MIN_H        (elem_h*6)+4+(GFX_ELEM_VOFF*9)+header_h
-
-// // #define SUBWND_MIN_W        ((elem_w/2)+panel_w+2+(GFX_ELEM_HOFF*3))*2
-// #define SUBWND_MIN_W        (elem_w+2+PANEL_MIN_W+(GFX_ELEM_HOFF*5)) > header_w ? \
-                             (elem_w+2+PANEL_MIN_W+(GFX_ELEM_HOFF*5)) : header_w
-
 char arr[] = {
-    '1','2','3','4','5','6','7','8','9','0'//,'q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l',';'
+    '1','2','3','4','5','6','7','8','9','0','q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l',';'
 };
 
 enum cur_wnd_enum
@@ -24,39 +17,6 @@ enum cur_wnd_enum
 struct winsize size;
 
 int cur_wnd = WND_NONE;
-// TODO Move wnd var here and call wrefresh(wnd) in handle_msg()
-WINDOW *wnd = NULL;
-// WINDOW *subwnd = NULL;
-
-WINDOW *note_w = NULL;
-WINDOW *note_sw = NULL;
-
-struct mmenu_wnd_t main_menu =
-{
-    .selection = 0
-};
-
-struct join_wnd_t join_srv =
-{
-    .servers = NULL,
-    .servers_count = 0,
-    .line = 0,
-    .vis_line = 0,
-    .selection = 0,
-    .mode = 0
-};
-
-struct create_wnd_t create_srv =
-{
-    .line = 0,
-    .vis_line = 0,
-    .selection = 0
-};
-
-struct cfg_wnd_t cfg_wnd = 
-{
-    .pad = NULL
-};
 
 struct global_dims_t global_dims;
 struct mmenu_dims_t mmenu_dims;
@@ -69,14 +29,13 @@ struct mmenu_axis_t mmenu_axis;
 struct join_axis_t join_axis;
 struct create_axis_t create_axis;
 
-// int popup_wnd_h;
-// int popup_wnd_w;
+struct global_wnds_t global_wnds;
+struct mmenu_wnd_t main_menu;
+struct join_wnd_t join_srv;
+struct create_wnd_t create_srv;
+struct cfg_wnd_t cfg_wnd;
 
-char *join_note_label = NULL;
-char *prefs_note_label = NULL;
-
-int join_note_size = 0;
-int prefs_note_size = 0;
+struct note_labels_t note_labels;
 
 int _draw_window(int);
 int _update_window(void);
@@ -86,7 +45,13 @@ int _delete_window(void);
 void sig_winch(int signo)
 {
 	ioctl(fileno(stdout), TIOCGWINSZ, (char *) &size);
-	resizeterm(size.ws_row, size.ws_col);
+	resize_term(size.ws_row, size.ws_col);
+    _set_dimensions();
+    _set_axis();
+    // wclear(curscr);
+    // _delete_window();
+    _draw_window(cur_wnd);
+    // _update_window();
 }
 
 /* Function to handle message when new message in queue occurs */
@@ -120,7 +85,7 @@ void handle_msg(union sigval sv)
 	{
         snprintf(ch, 20, "handle %d|%d|%d\0", mqd, msg, cur_wnd);
         popup_wnd(ch, POPUP_W_WAIT);
-        if (wnd == NULL || main_menu.status_sw == NULL || note_sw == NULL)
+        if (global_wnds.wnd == NULL || main_menu.status_sw == NULL || global_wnds.note_sw == NULL)
             return;
 
 		switch (msg)
@@ -141,8 +106,7 @@ void handle_msg(union sigval sv)
                     wprintw(main_menu.status_sw, "Connected");
                     wattroff(main_menu.status_sw, COLOR_PAIR(5));
 
-                    wmove(note_sw, 0, ((global_dims.wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
-                    wprintw(note_sw, MENU_SCR_NOTE_DISCONNECTED);
+                    mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_disconnected.size)/2), note_labels.mmenu_disconnected.text);
                     break;
                 case STATUS_CONNECTED:
                     wattron(main_menu.status_sw, COLOR_PAIR(4));
@@ -153,8 +117,7 @@ void handle_msg(union sigval sv)
                     wprintw(main_menu.status_sw, "Disconnected");
                     wattroff(main_menu.status_sw, COLOR_PAIR(4));
 
-                    wmove(note_sw, 0, ((global_dims.wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_CONNECTED)/2);
-                    wprintw(note_sw, MENU_SCR_NOTE_CONNECTED);
+                    mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_connected.size)/2), note_labels.mmenu_connected.text);
                     break;
                 case STATUS_CONNECTING:
                     wattron(main_menu.status_sw, COLOR_PAIR(3));
@@ -165,17 +128,14 @@ void handle_msg(union sigval sv)
                     wprintw(main_menu.status_sw, "Connecting");
                     wattroff(main_menu.status_sw, A_BLINK | COLOR_PAIR(3));
 
-                    wmove(note_sw, 0, ((global_dims.wnd_w-4-(GFX_ELEM_HOFF*2))/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
-                    wprintw(note_sw, MENU_SCR_NOTE_DISCONNECTED);
+                    mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_connecting.size)/2), note_labels.mmenu_connecting.text);
                     break;
                 default:
                     break;
                 }
                 
             }
-            wrefresh(wnd);
-            wrefresh(main_menu.status_sw);
-            wrefresh(note_sw);
+            _update_window();
             break;
         default:
             break;
@@ -199,115 +159,76 @@ void handle_msg(union sigval sv)
 	return EXIT_SUCCESS;
 }
 
-int _set_labels()
+int _set_label(struct label_t *lbl, char *str)
 {
-    char * tmp = NULL;
     char *tmp_label = NULL;
+    int tmp_size = 0;
     int index;
     int sec_index;
+
     int thrd_index;
 
-    tmp_label = (char *)malloc(strlen(PREFS_SCR_NOTE)*sizeof(char)+1);
-    if (tmp_label != NULL)
-    {
-        strncpy(tmp_label, PREFS_SCR_NOTE, strlen(PREFS_SCR_NOTE));
-        for (index = 0; index < strlen(PREFS_SCR_NOTE); index++)
-        {
-            if (tmp_label[index] == '\t')
-            {
-                for (sec_index = 0; sec_index < sizeof('\t'); sec_index++)
-                {
-                    prefs_note_size++;
-                }
-            }
-            else
-                prefs_note_size++;
-        }
-        
-        prefs_note_label = malloc(prefs_note_size+1);
-        if (prefs_note_label != NULL)
-        {
-            // prefs_note_size
-            for (index = 0, sec_index = 0; sec_index < strlen(PREFS_SCR_NOTE); sec_index++)
-            {
-                if (tmp_label[sec_index] != '\t')
-                {
-                    prefs_note_label[index] = tmp_label[sec_index];
-                    index++;
-                }
-                else
-                {
-                    for (thrd_index = 0; thrd_index < sizeof('\t'); ++thrd_index)
-                    {
-                        prefs_note_label[index] = '\x20';
-                        index++;
-                    }
-                    
-                }
+    int ret = EXIT_SUCCESS;
 
-                // For some reason commenting this line will cause "malloc(): corrupted top size" error
-                // printf(" ");
-            }
+    tmp_size = strlen(str);
+
+    tmp_label = (char *)malloc(tmp_size*sizeof(char)+1);
+    if (tmp_label == NULL)
+        return EXIT_FAILURE;
+
+    strncpy(tmp_label, str, tmp_size);
+    for (index = 0; index < tmp_size; index++)
+    {
+        if (tmp_label[index] == '\t')
+        {
+            lbl->size+=sizeof('\t');
         }
-        // free(tmp_label);
+        else
+            lbl->size++;
+    }
         
-        // printf(" ");
+    lbl->text = malloc(lbl->size+1);
+
+    if (lbl->text == NULL)
+        return EXIT_FAILURE;
+
+    memset(lbl->text, '\x20', lbl->size);
+    for (index = 0, sec_index = 0; sec_index < tmp_size; sec_index++)
+    {
+        if (tmp_label[sec_index] == '\t')
+        {
+            index += sizeof('\t');
+        }
+        else
+        {
+            lbl->text[index] = tmp_label[sec_index];
+            index++;
+        }
     }
 
-    tmp = (char *)realloc(tmp_label, strlen(JOIN_SCR_NOTE)*sizeof(char)+1);
-    if (tmp != NULL)
-    {
-        tmp_label = tmp;
-        strncpy(tmp_label, JOIN_SCR_NOTE, strlen(JOIN_SCR_NOTE));
-        for (index = 0; index < strlen(JOIN_SCR_NOTE); index++)
-        {
-            if (tmp_label[index] == '\t')
-            {
-                for (sec_index = 0; sec_index < sizeof('\t'); sec_index++)
-                {
-                    join_note_size++;
-                }
-            }
-            else
-                join_note_size++;
-        }
-        
-        join_note_label = malloc(join_note_size+1);
-        if (join_note_label != NULL)
-        {
-            // join_note_size
-            for (index = 0, sec_index = 0; sec_index < strlen(JOIN_SCR_NOTE); sec_index++)
-            {
-                if (tmp_label[sec_index] != '\t')
-                {
-                    join_note_label[index] = tmp_label[sec_index];
-                    index++;
-                }
-                else
-                {
-                    for (thrd_index = 0; thrd_index < sizeof('\t'); ++thrd_index)
-                    {
-                        join_note_label[index] = '\x20';
-                        index++;
-                    }
-                    
-                }
+    free(tmp_label);
 
-                // For some reason commenting this line will cause "malloc(): corrupted top size" error
-                // printf(" ");
-            }
-        }
-        free(tmp_label);
-    }
+    return ret;
+}
 
-    return 0;
+int _set_labels()
+{
+    int ret = EXIT_SUCCESS;
+
+    ret += _set_label(&note_labels.mmenu_connected, MENU_SCR_NOTE_CONNECTED);
+    ret += _set_label(&note_labels.mmenu_disconnected, MENU_SCR_NOTE_DISCONNECTED);
+    ret += _set_label(&note_labels.mmenu_connecting, MENU_SCR_NOTE_CONNECTING);
+    ret += _set_label(&note_labels.join_srv, JOIN_SCR_NOTE);
+    ret += _set_label(&note_labels.create_srv, CREATE_SCR_NOTE);
+    ret += _set_label(&note_labels.prefs_wnd, PREFS_SCR_NOTE);
+
+    return ret;
 }
 
 int _set_dimensions()
 {
     int main_menu_wnd_min_h;
     int main_menu_wnd_min_w;
-    // int tmp = 0;
     int ret = EXIT_SUCCESS;
 
     ioctl(fileno(stdout), TIOCGWINSZ, (char *) &size);
@@ -320,11 +241,8 @@ int _set_dimensions()
         global_dims.wnd_h = SUBWND_SET_H - 2 - (GFX_ELEM_VOFF*3) - global_dims.elem_h;
         global_dims.wnd_w = SUBWND_SET_W - 2 - (GFX_ELEM_HOFF*2);
 
-        // global_dims.subwnd_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*2);
-        // global_dims.subwnd_w = global_dims.wnd_w - 2 - (GFX_ELEM_HOFF*2);
-
         global_dims.note_h = global_dims.elem_h;
-        global_dims.note_w = SUBWND_SET_W - 2 - (GFX_ELEM_HOFF*2);
+        global_dims.note_w = global_dims.wnd_w;
     }
 
     /* Set dimensions that are used in main menu window */
@@ -373,7 +291,6 @@ int _set_dimensions()
         join_dims.tb_h = global_dims.elem_h - 2;
         join_dims.tb_w = join_dims.sname_w - 1 - join_dims.lbl_w;
         if ((2 + join_dims.lbl_w + join_dims.tb_w + join_dims.btns_border_w) > (global_dims.wnd_w - 2 - (GFX_ELEM_HOFF*2)))
-            // join_dims.tb_w = IP_ADDR_LEN + 6;
             join_dims.tb_w += (global_dims.wnd_w - 2 - (GFX_ELEM_HOFF*2)) - (2 + join_dims.lbl_w + join_dims.tb_w + join_dims.btns_border_w);
         else
             join_dims.tb_w = join_dims.tb_w > IP_ADDR_LEN + 6 ? join_dims.tb_w : IP_ADDR_LEN + 6;
@@ -387,8 +304,6 @@ int _set_dimensions()
         join_dims.vis_pad_h = join_dims.pad_border_h - 2;
         join_dims.vis_pad_w = join_dims.pad_border_w - 2;
 
-        // TODO: Add calibration for these dimensions
-        join_dims.pad_h = join_dims.vis_pad_h;
         join_dims.pad_w = join_dims.vis_pad_w;
 
         if (join_dims.sname_w < NAME_LEN)
@@ -399,31 +314,32 @@ int _set_dimensions()
     {
         create_dims.subwnd_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*2);
 
-        create_dims.sname_h = global_dims.elem_h - 2;
+        create_dims.pad_elem_h = 1;
+
+        create_dims.sname_h = create_dims.pad_elem_h;
         create_dims.sname_w = strlen(CREATE_SCR_SRV_NAME_LABEL)+1+NAME_LEN;
 
-        create_dims.musers_h = global_dims.elem_h - 2;
+        create_dims.musers_h = create_dims.pad_elem_h;
         create_dims.musers_w = strlen(CREATE_SCR_CONN_USERS_LABEL)+4;
 
-        create_dims.rusers_h = global_dims.elem_h - 2;
+        create_dims.rusers_h = create_dims.pad_elem_h;
         create_dims.rusers_w = strlen(CREATE_SCR_RESTR_USERS_LABEL)+2;
 
-        create_dims.saddr_h = global_dims.elem_h - 2;
+        create_dims.saddr_h = create_dims.pad_elem_h;
         create_dims.saddr_w = strlen(CREATE_SCR_SRV_ADDR_LABEL) + IP_ADDR_LEN + 1;
 
-        create_dims.sport_h = global_dims.elem_h - 2;
+        create_dims.sport_h = create_dims.pad_elem_h;
         create_dims.sport_w = strlen(CREATE_SCR_SRV_PORT_LABEL) + 6;
 
-        create_dims.lcl_addr_h = global_dims.elem_h - 2;
+        create_dims.lcl_addr_h = create_dims.pad_elem_h;
         create_dims.lcl_addr_w = strlen(CREATE_SCR_LCL_ADDR_LABEL)+2;
 
-        create_dims.auto_port_h = global_dims.elem_h - 2;
+        create_dims.auto_port_h = create_dims.pad_elem_h;
         create_dims.auto_port_w = strlen(CREATE_SCR_AUTO_PORT_LABEL)+2;
 
         create_dims.btns_h = global_dims.elem_h;
         create_dims.btns_w = global_dims.elem_w;
 
-        create_dims.pad_elem_h = 1;
         create_dims.pad_elem_w = (create_dims.btns_w*3) - 4;
         create_dims.pad_elem_w = create_dims.pad_elem_w > create_dims.sname_w ? create_dims.pad_elem_w : create_dims.sname_w;
         create_dims.pad_elem_w = create_dims.pad_elem_w > create_dims.musers_w ? create_dims.pad_elem_w : create_dims.musers_w;
@@ -437,9 +353,6 @@ int _set_dimensions()
         create_dims.srv_info_sw_h = 4;
         create_dims.srv_info_w = create_dims.pad_elem_w + 4 + (GFX_ELEM_HOFF*2);
 
-        // create_dims.pad_border_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*3) - create_dims.btns_h;
-        
-
         create_dims.pad_h = (create_dims.pad_elem_h*7) + 6;
         create_dims.pad_w = create_dims.pad_elem_w;
 
@@ -447,7 +360,6 @@ int _set_dimensions()
         create_dims.vis_pad_h = create_dims.vis_pad_h > create_dims.pad_h ? create_dims.pad_h : create_dims.vis_pad_h;
         create_dims.vis_pad_w = create_dims.pad_w;
 
-        // create_dims.pad_border_h = create_dims.srv_info_h - 2 - (GFX_ELEM_VOFF*2) - create_dims.srv_info_sw_h - create_dims.btns_h - 2 - (GFX_ELEM_VOFF*2);
         create_dims.pad_border_h = create_dims.vis_pad_h + 2;
         create_dims.pad_border_w = create_dims.pad_elem_w + 2;
 
@@ -467,15 +379,21 @@ int _set_axis()
 {
     int ret = EXIT_SUCCESS;
 
+    /* Set axis that are global across all windows */
     {
         global_axis.wnd_y = 1+GFX_ELEM_VOFF;
         global_axis.wnd_x = 1+GFX_ELEM_HOFF;
+        // global_axis.wnd_y = 0;
+        // global_axis.wnd_x = 0;
         // global_axis.subwnd_y = 0;
         // global_axis.subwnd_x = 0;
         global_axis.note_y = global_axis.wnd_y+global_dims.wnd_h+(GFX_ELEM_VOFF*2);
         global_axis.note_x = 1+GFX_ELEM_HOFF;
+        // global_axis.note_y = global_axis.wnd_y+global_dims.wnd_h+(GFX_ELEM_VOFF*1);
+        // global_axis.note_x = 0;
     }
 
+    /* Set axis that are used in main menu window */
     {
         mmenu_axis.header_y = 1+GFX_ELEM_VOFF;
         mmenu_axis.header_x = 1+GFX_ELEM_HOFF;
@@ -495,6 +413,7 @@ int _set_axis()
         mmenu_axis.btns_x[3] = 1+GFX_ELEM_HOFF;
     }
 
+    /* Set axis that are used in join server window */
     {
         join_axis.top_panel_y = 1+GFX_ELEM_VOFF;
         join_axis.top_panel_x = 1+GFX_ELEM_HOFF;
@@ -507,15 +426,15 @@ int _set_axis()
         join_axis.pad_border_y = join_axis.top_panel_y + join_dims.sinfo_h - 1;
         join_axis.pad_border_x = 1+GFX_ELEM_HOFF;
 
-        join_axis.vis_pad_ys = join_axis.pad_border_y + 2 + GFX_ELEM_VOFF;
-        join_axis.vis_pad_xs = join_axis.pad_border_x + 2 + GFX_ELEM_HOFF;
-        join_axis.vis_pad_ye = join_axis.pad_border_y + join_dims.pad_border_h;
+        join_axis.vis_pad_ys = global_axis.wnd_y + join_axis.pad_border_y + 1;
+        join_axis.vis_pad_xs = global_axis.wnd_x + join_axis.pad_border_x + 1;
+        join_axis.vis_pad_ye = join_axis.pad_border_y + join_dims.pad_border_h - 1;
         join_axis.vis_pad_xe = join_axis.pad_border_x + join_dims.pad_border_w;
 
-        join_axis.pad_ys = 0;
-        join_axis.pad_xs = 0;
-        join_axis.pad_ye;
-        join_axis.pad_xe;
+        // join_axis.pad_ys = 0;
+        // join_axis.pad_xs = 0;
+        // join_axis.pad_ye = join_axis.pad_ys + join_dims.pad_h - 1;
+        // join_axis.pad_xe = join_axis.pad_xs + join_dims.pad_w - 1;
 
         join_axis.caddr_y = join_axis.pad_border_y + join_dims.pad_border_h + GFX_ELEM_VOFF - 1;
         join_axis.caddr_x = 1+GFX_ELEM_HOFF;
@@ -533,6 +452,7 @@ int _set_axis()
         join_axis.btns_x[2] = 3 + (join_dims.btns_w*2);
     }
 
+    /* Set axis that are used in create server window */
     {
         create_axis.srv_info_y = 1+GFX_ELEM_VOFF;
         create_axis.srv_info_x = (global_dims.wnd_w - create_dims.srv_info_w)/2 + 1 + GFX_ELEM_HOFF;
@@ -556,21 +476,30 @@ int _set_axis()
         create_axis.pad_ye;
         create_axis.pad_xe;
 
-        create_axis.sname_y = 0;
-        create_axis.sname_x = 0;
+        // create_axis.sname_y = 0;
+        // create_axis.sname_x = 0;
 
-        create_axis.musers_y = create_axis.sname_y + 2;
-        create_axis.musers_x = 0;
-        create_axis.rusers_y = create_axis.musers_y + 2;
-        create_axis.rusers_x = 0;
-        create_axis.saddr_y = create_axis.rusers_y + 2;
-        create_axis.saddr_x = 0;
-        create_axis.sport_y = create_axis.saddr_y + 2;
-        create_axis.sport_x = 0;
-        create_axis.lcl_addr_y = create_axis.sport_y + 2;
-        create_axis.lcl_addr_x = 0;
-        create_axis.auto_port_y = create_axis.lcl_addr_y + 2;
-        create_axis.auto_port_x = 0;
+        create_axis.pad_elems_y[0] = 0;
+        create_axis.pad_elems_x[0] = 0;
+        create_axis.pad_elems_y[1] = create_axis.pad_elems_y[0] + 2;
+        create_axis.pad_elems_x[1] = 0;
+        create_axis.pad_elems_y[2] = create_axis.pad_elems_y[1] + 2;
+        create_axis.pad_elems_x[2] = 0;
+        create_axis.pad_elems_y[3] = create_axis.pad_elems_y[2] + 2;
+        create_axis.pad_elems_x[3] = 0;
+        create_axis.pad_elems_y[4] = create_axis.pad_elems_y[3] + 2;
+        create_axis.pad_elems_x[4] = 0;
+        create_axis.pad_elems_y[5] = create_axis.pad_elems_y[4] + 2;
+        create_axis.pad_elems_x[5] = 0;
+        create_axis.pad_elems_y[6] = create_axis.pad_elems_y[5] + 2;
+        create_axis.pad_elems_x[6] = 0;
+
+        // create_axis.sport_y = create_axis.saddr_y + 2;
+        // create_axis.sport_x = 0;
+        // create_axis.lcl_addr_y = create_axis.sport_y + 2;
+        // create_axis.lcl_addr_x = 0;
+        // create_axis.auto_port_y = create_axis.lcl_addr_y + 2;
+        // create_axis.auto_port_x = 0;
 
         create_axis.btns_y[0] = create_dims.srv_info_h - 1 - create_dims.btns_h + GFX_ELEM_VOFF;
         create_axis.btns_x[0] = 1 + GFX_ELEM_HOFF;
@@ -592,13 +521,21 @@ int _set_axis()
     return ret;
 }
 
-void init_graphics()
+int init_graphics()
 {
-    _set_labels();
+    int ret = EXIT_SUCCESS;
 
-    _set_dimensions();
+    // _set_labels();
+    ret += _set_label(&note_labels.mmenu_connected, MENU_SCR_NOTE_CONNECTED);
+    ret += _set_label(&note_labels.mmenu_disconnected, MENU_SCR_NOTE_DISCONNECTED);
+    ret += _set_label(&note_labels.mmenu_connecting, MENU_SCR_NOTE_CONNECTING);
+    ret += _set_label(&note_labels.join_srv, JOIN_SCR_NOTE);
+    ret += _set_label(&note_labels.create_srv, CREATE_SCR_NOTE);
+    ret += _set_label(&note_labels.prefs_wnd, PREFS_SCR_NOTE);
 
-    _set_axis();
+    ret += _set_dimensions();
+
+    ret += _set_axis();
 
     initscr(); /* Init ncurses lib */
     fflush(stdout);
@@ -619,20 +556,39 @@ void init_graphics()
     //init_pair(3, COLOR_BLUE, COLOR_MAGENTA); /* Init color pair for a 'selected' color palette */
 	bkgd(COLOR_PAIR(1)); /* Set background color to usual color palette */
 	refresh(); /* Update stdscr */
+
+    return ret;
 }
 
 void deinit_graphics()
 {
     endwin();
 
-    if (prefs_note_label != NULL)
+    if (note_labels.mmenu_connected.text != NULL)
     {
-        free(prefs_note_label);
+        free(note_labels.mmenu_connected.text);
     }
-    if (join_note_label != NULL)
+    if (note_labels.mmenu_disconnected.text != NULL)
     {
-        free(join_note_label);
+        free(note_labels.mmenu_disconnected.text);
     }
+    if (note_labels.mmenu_connecting.text != NULL)
+    {
+        free(note_labels.mmenu_connecting.text);
+    }
+    if (note_labels.join_srv.text != NULL)
+    {
+        free(note_labels.join_srv.text);
+    }
+    if (note_labels.create_srv.text != NULL)
+    {
+        free(note_labels.create_srv.text);
+    }
+    if (note_labels.prefs_wnd.text != NULL)
+    {
+        free(note_labels.prefs_wnd.text);
+    }
+    
 }
 
 int _draw_window(int wnd_type)
@@ -650,8 +606,11 @@ int _draw_window(int wnd_type)
             {
                 if (wnd_type == cur_wnd)
                 {
-                    delwin(note_sw);
-                    delwin(note_w);
+                    wclear(stdscr);
+                    refresh();
+
+                    delwin(global_wnds.note_sw);
+                    delwin(global_wnds.note_w);
                     delwin(main_menu.panel_sw);
                     delwin(main_menu.panel_w);
                     for (index = 0; index < 4; ++index)
@@ -662,9 +621,9 @@ int _draw_window(int wnd_type)
                     delwin(main_menu.status_sw);
                     delwin(main_menu.status_w);
                     delwin(main_menu.header_w);
-                    delwin(wnd);
+                    delwin(global_wnds.wnd);
 
-                    wnd = NULL;
+                    global_wnds.wnd = NULL;
                     main_menu.header_w = NULL;
                     main_menu.status_w = NULL;
                     main_menu.status_sw = NULL;
@@ -675,8 +634,8 @@ int _draw_window(int wnd_type)
                     }
                     main_menu.panel_w = NULL;
                     main_menu.panel_sw = NULL;
-                    note_w = NULL;
-                    note_sw = NULL;
+                    global_wnds.note_w = NULL;
+                    global_wnds.note_sw = NULL;
                 }
                 else
                 {
@@ -689,16 +648,14 @@ int _draw_window(int wnd_type)
                     strcpy(main_menu.btns[1].lbl, MENU_SCR_SRV_BTN_LABEL);
                     strcpy(main_menu.btns[2].lbl, MENU_SCR_CFG_BTN_LABEL);
                     strcpy(main_menu.btns[3].lbl, MENU_SCR_QUIT_BTN_LABEL);
-
-                    cur_wnd = WND_MAIN_MENU;
                 }
 
-                wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
+                global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
 
-                main_menu.header_w = derwin(wnd, mmenu_dims.header_h, mmenu_dims.header_w, mmenu_axis.header_y, mmenu_axis.header_x);
-                main_menu.status_w = derwin(wnd, mmenu_dims.status_h, mmenu_dims.status_w, mmenu_axis.status_y, mmenu_axis.status_x);
-                main_menu.btns_border = derwin(wnd, mmenu_dims.btns_border_h, mmenu_dims.btns_border_w, mmenu_axis.btns_border_y, mmenu_axis.btns_border_x);
-                main_menu.panel_w = derwin(wnd, mmenu_dims.panel_h, mmenu_dims.panel_w, mmenu_axis.panel_y, mmenu_axis.panel_x);
+                main_menu.header_w = derwin(global_wnds.wnd, mmenu_dims.header_h, mmenu_dims.header_w, mmenu_axis.header_y, mmenu_axis.header_x);
+                main_menu.status_w = derwin(global_wnds.wnd, mmenu_dims.status_h, mmenu_dims.status_w, mmenu_axis.status_y, mmenu_axis.status_x);
+                main_menu.btns_border = derwin(global_wnds.wnd, mmenu_dims.btns_border_h, mmenu_dims.btns_border_w, mmenu_axis.btns_border_y, mmenu_axis.btns_border_x);
+                main_menu.panel_w = derwin(global_wnds.wnd, mmenu_dims.panel_h, mmenu_dims.panel_w, mmenu_axis.panel_y, mmenu_axis.panel_x);
                 main_menu.panel_sw = derwin(main_menu.panel_w, mmenu_dims.panel_h-2, mmenu_dims.panel_w-2, 1, 1);
                 
                 main_menu.status_sw = derwin(main_menu.status_w, mmenu_dims.status_h - 2, mmenu_dims.status_w - 2, 1, 1);
@@ -707,10 +664,10 @@ int _draw_window(int wnd_type)
                 main_menu.btns[2].wnd = derwin(main_menu.btns_border, global_dims.elem_h, global_dims.elem_w, mmenu_axis.btns_y[2], mmenu_axis.btns_x[2]);
                 main_menu.btns[3].wnd = derwin(main_menu.btns_border, global_dims.elem_h, global_dims.elem_w, mmenu_axis.btns_y[3], mmenu_axis.btns_x[3]);
 
-                note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
-                note_sw = derwin(note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
+                global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
+                global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
 
-                box(wnd, ACS_VLINE, ACS_HLINE);
+                box(global_wnds.wnd, ACS_VLINE, ACS_HLINE);
                 box(main_menu.status_w, ' ', ' ');
                 box(main_menu.btns_border, ACS_VLINE, ACS_HLINE);
                 box(main_menu.btns[0].wnd, ACS_VLINE, ACS_HLINE);
@@ -718,11 +675,9 @@ int _draw_window(int wnd_type)
                 box(main_menu.btns[2].wnd, ACS_VLINE, ACS_HLINE);
                 box(main_menu.btns[3].wnd, ACS_VLINE, ACS_HLINE);
                 box(main_menu.panel_w, ACS_VLINE, ACS_HLINE);
-                box(note_w, ' ', ' ');
+                box(global_wnds.note_w, ' ', ' ');
 
-                wmove(wnd, 0, (global_dims.wnd_w/2)-strlen(MENU_SCR_LABEL)/2);
-                wprintw(wnd, MENU_SCR_LABEL);
-
+                mvwprintw(global_wnds.wnd, 0, (global_dims.wnd_w-strlen(MENU_SCR_LABEL))/2, MENU_SCR_LABEL);
                 wprintw(main_menu.header_w,
                         "__          __  _\n" \
                         "\\ \\        / / | |\n" \
@@ -742,8 +697,7 @@ int _draw_window(int wnd_type)
                     wprintw(main_menu.status_sw, "Disconnected");
                     wattroff(main_menu.status_sw, COLOR_PAIR(4));
 
-                    wmove(note_sw, 0, ((global_dims.note_w-2)/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
-                    wprintw(note_sw, MENU_SCR_NOTE_DISCONNECTED);
+                    mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_disconnected.size)/2), note_labels.mmenu_disconnected.text);
                     break;
                 case STATUS_CONNECTED:
                     wattron(main_menu.status_sw, COLOR_PAIR(5));
@@ -754,8 +708,7 @@ int _draw_window(int wnd_type)
                     wprintw(main_menu.status_sw, "Connected");
                     wattroff(main_menu.status_sw, COLOR_PAIR(5));
 
-                    wmove(note_sw, 0, ((global_dims.note_w-2)/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
-                    wprintw(note_sw, MENU_SCR_NOTE_CONNECTED);
+                    mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_connected.size)/2), note_labels.mmenu_connected.text);
                     break;
                 case STATUS_CONNECTING:
                     wattron(main_menu.status_sw, COLOR_PAIR(3));
@@ -766,8 +719,7 @@ int _draw_window(int wnd_type)
                     wprintw(main_menu.status_sw, "Connecting");
                     wattroff(main_menu.status_sw, A_BLINK | COLOR_PAIR(3));
 
-                    wmove(note_sw, 0, ((global_dims.note_w-2)/2)-strlen(MENU_SCR_NOTE_DISCONNECTED)/2);
-                    wprintw(note_sw, MENU_SCR_NOTE_DISCONNECTED);
+                    mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_connecting.size)/2), note_labels.mmenu_connecting.text);
                     break;
                 default:
                     break;
@@ -775,116 +727,113 @@ int _draw_window(int wnd_type)
 
                 wprintw(main_menu.panel_sw, MENU_SCR_NOTE_LABEL"\n");
                 {
-                wprintw(main_menu.panel_sw, "1: ");
+                wprintw(main_menu.panel_sw, "ACS_BBSS: ");
                 waddch(main_menu.panel_sw, ACS_BBSS);
-                wprintw(main_menu.panel_sw, " 2: ");
+                wprintw(main_menu.panel_sw, "\tACS_BLOCK: ");
                 waddch(main_menu.panel_sw, ACS_BLOCK);
-                wprintw(main_menu.panel_sw, " 3: ");
+                wprintw(main_menu.panel_sw, "\tACS_BOARD: ");
                 waddch(main_menu.panel_sw, ACS_BOARD);
-                wprintw(main_menu.panel_sw, " 4: ");
+                wprintw(main_menu.panel_sw, "\tACS_BSBS: ");
                 waddch(main_menu.panel_sw, ACS_BSBS);
-                wprintw(main_menu.panel_sw, " 5: ");
+                wprintw(main_menu.panel_sw, "\tACS_BSSB: ");
                 waddch(main_menu.panel_sw, ACS_BSSB);
-                wprintw(main_menu.panel_sw, "\n6: ");
+                wprintw(main_menu.panel_sw, "\nACS_BSSS: ");
                 waddch(main_menu.panel_sw, ACS_BSSS);
-                wprintw(main_menu.panel_sw, " 7: ");
+                wprintw(main_menu.panel_sw, "\tACS_BTEE: ");
                 waddch(main_menu.panel_sw, ACS_BTEE);
-                wprintw(main_menu.panel_sw, " 8: ");
+                wprintw(main_menu.panel_sw, "\tACS_BULLET: ");
                 waddch(main_menu.panel_sw, ACS_BULLET);
-                wprintw(main_menu.panel_sw, " 9: ");
+                wprintw(main_menu.panel_sw, "\tACS_CKBOARD: ");
                 waddch(main_menu.panel_sw, ACS_CKBOARD);
-                wprintw(main_menu.panel_sw, " 10: ");
+                wprintw(main_menu.panel_sw, "\tACS_DARROW: ");
                 waddch(main_menu.panel_sw, ACS_DARROW);
-                wprintw(main_menu.panel_sw, "\n11: ");
+                wprintw(main_menu.panel_sw, "\nACS_DEGREE: ");
                 waddch(main_menu.panel_sw, ACS_DEGREE);
-                wprintw(main_menu.panel_sw, " 12: ");
+                wprintw(main_menu.panel_sw, "\tACS_DIAMOND: ");
                 waddch(main_menu.panel_sw, ACS_DIAMOND);
-                wprintw(main_menu.panel_sw, " 13: ");
+                wprintw(main_menu.panel_sw, "\tACS_GEQUAL: ");
                 waddch(main_menu.panel_sw, ACS_GEQUAL);
-                wprintw(main_menu.panel_sw, " 14: ");
+                wprintw(main_menu.panel_sw, "\tACS_HLINE: ");
                 waddch(main_menu.panel_sw, ACS_HLINE);
-                wprintw(main_menu.panel_sw, " 15: ");
+                wprintw(main_menu.panel_sw, "\tACS_LANTERN: ");
                 waddch(main_menu.panel_sw, ACS_LANTERN);
-                wprintw(main_menu.panel_sw, "\n16: ");
+                wprintw(main_menu.panel_sw, "\nACS_LARROW: ");
                 waddch(main_menu.panel_sw, ACS_LARROW);
-                wprintw(main_menu.panel_sw, " 17: ");
+                wprintw(main_menu.panel_sw, "\tACS_LEQUAL: ");
                 waddch(main_menu.panel_sw, ACS_LEQUAL);
-                wprintw(main_menu.panel_sw, " 18: ");
+                wprintw(main_menu.panel_sw, "\tACS_LLCORNER: ");
                 waddch(main_menu.panel_sw, ACS_LLCORNER);
-                wprintw(main_menu.panel_sw, " 19: ");
+                wprintw(main_menu.panel_sw, "\tACS_LRCORNER: ");
                 waddch(main_menu.panel_sw, ACS_LRCORNER);
-                wprintw(main_menu.panel_sw, " 20: ");
+                wprintw(main_menu.panel_sw, "\tACS_LTEE: ");
                 waddch(main_menu.panel_sw, ACS_LTEE);
-                wprintw(main_menu.panel_sw, "\n21: ");
+                wprintw(main_menu.panel_sw, "\nACS_NEQUAL: ");
                 waddch(main_menu.panel_sw, ACS_NEQUAL);
-                wprintw(main_menu.panel_sw, " 22: ");
+                wprintw(main_menu.panel_sw, "\tACS_PI: ");
                 waddch(main_menu.panel_sw, ACS_PI);
-                wprintw(main_menu.panel_sw, " 23: ");
+                wprintw(main_menu.panel_sw, "\tACS_PLMINUS: ");
                 waddch(main_menu.panel_sw, ACS_PLMINUS);
-                wprintw(main_menu.panel_sw, " 24: ");
+                wprintw(main_menu.panel_sw, "\tACS_PLUS: ");
                 waddch(main_menu.panel_sw, ACS_PLUS);
-                wprintw(main_menu.panel_sw, " 25: ");
+                wprintw(main_menu.panel_sw, "\tACS_RARROW: ");
                 waddch(main_menu.panel_sw, ACS_RARROW);
-                wprintw(main_menu.panel_sw, "\n26: ");
+                wprintw(main_menu.panel_sw, "\nACS_RTEE: ");
                 waddch(main_menu.panel_sw, ACS_RTEE);
-                wprintw(main_menu.panel_sw, " 27: ");
+                wprintw(main_menu.panel_sw, "\tACS_S1: ");
                 waddch(main_menu.panel_sw, ACS_S1);
-                wprintw(main_menu.panel_sw, " 28: ");
+                wprintw(main_menu.panel_sw, "\tACS_S3: ");
                 waddch(main_menu.panel_sw, ACS_S3);
-                wprintw(main_menu.panel_sw, " 29: ");
+                wprintw(main_menu.panel_sw, "\tACS_S7: ");
                 waddch(main_menu.panel_sw, ACS_S7);
-                wprintw(main_menu.panel_sw, " 30: ");
+                wprintw(main_menu.panel_sw, "\tACS_S9: ");
                 waddch(main_menu.panel_sw, ACS_S9);
-                wprintw(main_menu.panel_sw, "\n31: ");
+                wprintw(main_menu.panel_sw, "\nACS_SBBS: ");
                 waddch(main_menu.panel_sw, ACS_SBBS);
-                wprintw(main_menu.panel_sw, " 32: ");
+                wprintw(main_menu.panel_sw, "\tACS_SBSB: ");
                 waddch(main_menu.panel_sw, ACS_SBSB);
-                wprintw(main_menu.panel_sw, " 33: ");
+                wprintw(main_menu.panel_sw, "\tACS_SBSS: ");
                 waddch(main_menu.panel_sw, ACS_SBSS);
-                wprintw(main_menu.panel_sw, " 34: ");
+                wprintw(main_menu.panel_sw, "\tACS_SSBB: ");
                 waddch(main_menu.panel_sw, ACS_SSBB);
-                wprintw(main_menu.panel_sw, " 35: ");
+                wprintw(main_menu.panel_sw, "\tACS_SSBS: ");
                 waddch(main_menu.panel_sw, ACS_SSBS);
-                wprintw(main_menu.panel_sw, "\n36: ");
+                wprintw(main_menu.panel_sw, "\nACS_SSSB: ");
                 waddch(main_menu.panel_sw, ACS_SSSB);
-                wprintw(main_menu.panel_sw, " 37: ");
+                wprintw(main_menu.panel_sw, "\tACS_SSSS: ");
                 waddch(main_menu.panel_sw, ACS_SSSS);
-                wprintw(main_menu.panel_sw, " 38: ");
+                wprintw(main_menu.panel_sw, "\tACS_STERLING: ");
                 waddch(main_menu.panel_sw, ACS_STERLING);
-                wprintw(main_menu.panel_sw, " 39: ");
+                wprintw(main_menu.panel_sw, "\tACS_TTEE: ");
                 waddch(main_menu.panel_sw, ACS_TTEE);
-                wprintw(main_menu.panel_sw, " 40: ");
+                wprintw(main_menu.panel_sw, "\tACS_UARROW: ");
                 waddch(main_menu.panel_sw, ACS_UARROW);
-                wprintw(main_menu.panel_sw, "\n41: ");
+                wprintw(main_menu.panel_sw, "\nACS_ULCORNER: ");
                 waddch(main_menu.panel_sw, ACS_ULCORNER);
-                wprintw(main_menu.panel_sw, " 42: ");
+                wprintw(main_menu.panel_sw, "\tACS_URCORNER: ");
                 waddch(main_menu.panel_sw, ACS_URCORNER);
-                wprintw(main_menu.panel_sw, " 43: ");
+                wprintw(main_menu.panel_sw, "\tACS_VLINE: ");
                 waddch(main_menu.panel_sw, ACS_VLINE);
                 }
 
                 for (index = 0; index < 4; ++index)
                 {
-                    wmove(main_menu.btns[index].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[index].lbl)/2);
-                    if (index == main_menu.selection)
-                    {
-                        wattron(main_menu.btns[index].wnd, A_BOLD | A_UNDERLINE);
-                        wprintw(main_menu.btns[index].wnd, "%s", main_menu.btns[index].lbl);
-                        wattroff(main_menu.btns[index].wnd, A_BOLD | A_UNDERLINE);
-                    }
-                    else
-                        wprintw(main_menu.btns[index].wnd, "%s", main_menu.btns[index].lbl);
+                    mvwprintw(main_menu.btns[index].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[index].lbl))/2, main_menu.btns[index].lbl);
                 }
 
-                _update_window();
+                wattron(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
+                mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
+                wattroff(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
             }
             break;
         case WND_JOIN_SRV:
             {
                 if (wnd_type == cur_wnd)
                 {
-                    delwin(note_sw);
-                    delwin(note_w);
+                    wclear(stdscr);
+                    refresh();
+
+                    delwin(global_wnds.note_sw);
+                    delwin(global_wnds.note_w);
                     for (index = 0; index < 3; ++index)
                     {
                         delwin(join_srv.btns[index].wnd);
@@ -899,10 +848,11 @@ int _draw_window(int wnd_type)
                     delwin(join_srv.saddr_w);
                     delwin(join_srv.sname_w);
                     delwin(join_srv.top_panel);
-                    delwin(wnd);
+                    delwin(global_wnds.wnd);
 
-                    wnd = NULL;
+                    global_wnds.wnd = NULL;
                     join_srv.top_panel = NULL;
+                    join_srv.sname_w = NULL;
                     join_srv.saddr_w = NULL;
                     join_srv.susers_w = NULL;
                     join_srv.pad_border = NULL;
@@ -915,8 +865,8 @@ int _draw_window(int wnd_type)
                     {
                         join_srv.btns[index].wnd = NULL;
                     }
-                    note_w = NULL;
-                    note_sw = NULL;
+                    global_wnds.note_w = NULL;
+                    global_wnds.note_sw = NULL;
                 }
                 else
                 {
@@ -927,16 +877,14 @@ int _draw_window(int wnd_type)
                     strcpy(join_srv.btns[0].lbl, JOIN_SCR_JOIN_BTN_LABEL);
                     strcpy(join_srv.btns[1].lbl, JOIN_SCR_REFRESH_BTN_LABEL);
                     strcpy(join_srv.btns[2].lbl, JOIN_SCR_CLEAR_BTN_LABEL);
-
-                    cur_wnd = WND_JOIN_SRV;
                 }
 
-                wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
+                global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
 
-                join_srv.top_panel = derwin(wnd, join_dims.sinfo_h, join_dims.sinfo_w, join_axis.top_panel_y, join_axis.top_panel_x);
-                join_srv.pad_border = derwin(wnd, join_dims.pad_border_h, join_dims.pad_border_w, join_axis.pad_border_y, join_axis.pad_border_x);
-                join_srv.caddr_w = derwin(wnd, join_dims.caddr_h, join_dims.caddr_w, join_axis.caddr_y, join_axis.caddr_x);
-                join_srv.btns_border = derwin(wnd, join_dims.btns_border_h, join_dims.btns_border_w, join_axis.btns_border_y, join_axis.btns_border_x);
+                join_srv.top_panel = derwin(global_wnds.wnd, join_dims.sinfo_h, join_dims.sinfo_w, join_axis.top_panel_y, join_axis.top_panel_x);
+                join_srv.pad_border = derwin(global_wnds.wnd, join_dims.pad_border_h, join_dims.pad_border_w, join_axis.pad_border_y, join_axis.pad_border_x);
+                join_srv.caddr_w = derwin(global_wnds.wnd, join_dims.caddr_h, join_dims.caddr_w, join_axis.caddr_y, join_axis.caddr_x);
+                join_srv.btns_border = derwin(global_wnds.wnd, join_dims.btns_border_h, join_dims.btns_border_w, join_axis.btns_border_y, join_axis.btns_border_x);
 
                 join_srv.sname_w = derwin(join_srv.top_panel, join_dims.sname_h, join_dims.sname_w, join_axis.sname_y, join_axis.sname_x);
                 join_srv.saddr_w = derwin(join_srv.top_panel, join_dims.saddr_h, join_dims.saddr_w, join_axis.saddr_y, join_axis.saddr_x);
@@ -948,131 +896,96 @@ int _draw_window(int wnd_type)
                 join_srv.btns[1].wnd = derwin(join_srv.btns_border, join_dims.btns_h, join_dims.btns_w, join_axis.btns_y[1], join_axis.btns_x[1]);
                 join_srv.btns[2].wnd = derwin(join_srv.btns_border, join_dims.btns_h, join_dims.btns_w, join_axis.btns_y[2], join_axis.btns_x[2]);
 
-                note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
-                note_sw = derwin(note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
+                global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
+                global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
 
-                box(wnd, ACS_VLINE, ACS_HLINE);
+                box(global_wnds.wnd, ACS_VLINE, ACS_HLINE);
                 box(join_srv.top_panel, ACS_VLINE, ACS_HLINE);
                 box(join_srv.pad_border, ACS_VLINE, ACS_HLINE);
                 box(join_srv.caddr_w, ACS_VLINE, ACS_HLINE);
                 box(join_srv.btns_border, ACS_VLINE, ACS_HLINE);
-                box(note_w, ' ', ' ');
+                box(global_wnds.note_w, ' ', ' ');
 
-                wmove(wnd, 0, (global_dims.wnd_w/2)-strlen(JOIN_SCR_LABEL)/2);
-                wprintw(wnd, JOIN_SCR_LABEL);
+                mvwprintw(global_wnds.wnd, 0, (global_dims.wnd_w-strlen(JOIN_SCR_LABEL))/2, JOIN_SCR_LABEL);
                 wprintw(join_srv.sname_w, JOIN_SCR_SRV_NAME_LABEL);
                 wprintw(join_srv.saddr_w, JOIN_SCR_SRV_ADDR_LABEL);
                 wprintw(join_srv.susers_w, JOIN_SCR_CONN_USERS_LABEL);
                 wprintw(join_srv.label_w, JOIN_SCR_MAN_ADDR_LABEL);
                 for (index = 0; index < 3; ++index)
                 {
-                    wmove(join_srv.btns[index].wnd, 0, (join_dims.btns_w/2)-strlen(join_srv.btns[index].lbl)/2);
-                    if (index == join_srv.selection)
-                    {
-                        wattron(join_srv.btns[index].wnd, A_BOLD | A_UNDERLINE);
-                        wprintw(join_srv.btns[index].wnd, "%s", join_srv.btns[index].lbl);
-                        wattroff(join_srv.btns[index].wnd, A_BOLD | A_UNDERLINE);
-                    }
-                    else
-                        wprintw(join_srv.btns[index].wnd, "%s", join_srv.btns[index].lbl);
+                    mvwprintw(join_srv.btns[index].wnd, 0, (join_dims.btns_w-strlen(join_srv.btns[index].lbl))/2, join_srv.btns[index].lbl);
                 }
-                wmove(note_sw, 0, ((global_dims.note_w-2)/2)-join_note_size/2);
-                wprintw(note_sw, join_note_label);
+
+                wattron(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                mvwprintw(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w-strlen(join_srv.btns[join_srv.selection].lbl))/2, join_srv.btns[join_srv.selection].lbl);
+                wattroff(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+
+                mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.join_srv.size)/2), note_labels.join_srv.text);
+
+                mvwaddch(join_srv.top_panel, 0, join_axis.saddr_x-1, ACS_BSSS);
+                mvwaddch(join_srv.top_panel, 0, join_axis.susers_x-1, ACS_BSSS);
+
+                mvwvline(join_srv.top_panel, 1, join_axis.saddr_x-1, ACS_VLINE, join_dims.sname_h);
+                mvwvline(join_srv.top_panel, 1, join_axis.susers_x-1, ACS_VLINE, join_dims.sname_h);
+
+                mvwaddch(join_srv.pad_border, 0, 0, ACS_LTEE);
+                mvwaddch(join_srv.pad_border, 0, join_axis.saddr_x-1, ACS_PLUS);
+                mvwaddch(join_srv.pad_border, 0, join_axis.susers_x-1, ACS_PLUS);
+                mvwaddch(join_srv.pad_border, 0, join_dims.pad_border_w-1, ACS_RTEE);
+
+                mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, 0, ACS_LTEE);
+
+                mvwaddch(join_srv.caddr_w, 0, join_axis.tb_x-1, ACS_BSSS);
+                mvwaddch(join_srv.caddr_w, 0, join_dims.caddr_w-1, ACS_BSSS);
+                mvwaddch(join_srv.btns_border, 0, join_axis.btns_x[1]-1, ACS_BSSS);
+                mvwaddch(join_srv.btns_border, 0, join_axis.btns_x[2]-1, ACS_BSSS);
+                mvwaddch(join_srv.btns_border, 0, 0, ACS_BSSS);
 
 
-                wmove(join_srv.top_panel, 0, join_axis.saddr_x-1);
-                waddch(join_srv.top_panel, ACS_BSSS);
-                wmove(join_srv.top_panel, 0, join_axis.susers_x-1);
-                waddch(join_srv.top_panel, ACS_BSSS);
-
-                wmove(join_srv.top_panel, 1, join_axis.saddr_x-1);
-                wvline(join_srv.top_panel, ACS_VLINE, join_dims.sname_h);
-                wmove(join_srv.top_panel, 1, join_axis.susers_x-1);
-                wvline(join_srv.top_panel, ACS_VLINE, join_dims.sname_h);
-
-                wmove(join_srv.pad_border, 0, 0);
-                waddch(join_srv.pad_border, ACS_LTEE);
-                wmove(join_srv.pad_border, 0, join_axis.saddr_x-1);
-                waddch(join_srv.pad_border, ACS_PLUS);
-                wmove(join_srv.pad_border, 0, join_axis.susers_x-1);
-                waddch(join_srv.pad_border, ACS_PLUS);
-                wmove(join_srv.pad_border, 0, join_dims.pad_border_w-1);
-                waddch(join_srv.pad_border, ACS_RTEE);
-
-                wmove(join_srv.pad_border, join_dims.pad_border_h-1, 0);
-                waddch(join_srv.pad_border, ACS_LTEE);
-
-                wmove(join_srv.caddr_w, 0, join_axis.tb_x-1);
-                waddch(join_srv.caddr_w, ACS_BSSS);
-                wmove(join_srv.caddr_w, 0, join_dims.caddr_w-1);
-                waddch(join_srv.caddr_w, ACS_BSSS);
-                wmove(join_srv.btns_border, 0, join_axis.btns_x[1]-1);
-                waddch(join_srv.btns_border, ACS_BSSS);
-                wmove(join_srv.btns_border, 0, join_axis.btns_x[2]-1);
-                waddch(join_srv.btns_border, ACS_BSSS);
-                wmove(join_srv.btns_border, 0, 0);
-                waddch(join_srv.btns_border, ACS_BSSS);
-
-
-                wmove(join_srv.servers_pad, 0, join_axis.saddr_x-2);
-                wvline(join_srv.servers_pad, ACS_VLINE, join_dims.pad_h);
-                wmove(join_srv.servers_pad, 0, join_axis.susers_x-2);
-                wvline(join_srv.servers_pad, ACS_VLINE, join_dims.pad_h);
-                wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
-                for (index = 1; index < sizeof(arr); index++)
+                mvwvline(join_srv.pad_border, 1, join_axis.saddr_x-1, ACS_VLINE, join_dims.pad_border_h-2);
+                mvwvline(join_srv.pad_border, 1, join_axis.susers_x-1, ACS_VLINE, join_dims.pad_border_h-2);
+                
+                for (index = 0; index < sizeof(arr); index++)
                 {
-                    wmove(join_srv.servers_pad, index, 0);
-                    whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                    wmove(join_srv.servers_pad, index, 0);
-                    wprintw(join_srv.servers_pad, "%c", arr[index]);
-                    wmove(join_srv.servers_pad, index, join_axis.saddr_x-2);
-                    waddch(join_srv.servers_pad, ACS_VLINE);
-                    wmove(join_srv.servers_pad, index, join_axis.susers_x-2);
-                    waddch(join_srv.servers_pad, ACS_VLINE);
+                    mvwhline(join_srv.servers_pad, index, 0, ' ', join_dims.pad_w);
+                    mvwprintw(join_srv.servers_pad, index, 0, "%c", arr[index]);
+                    mvwaddch(join_srv.servers_pad, index, join_axis.saddr_x-2, ACS_VLINE);
+                    mvwaddch(join_srv.servers_pad, index, join_axis.susers_x-2, ACS_VLINE);
                 }
-
+                wattron(join_srv.servers_pad, COLOR_PAIR(2));
+                mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
+                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
 
                 tmp = join_axis.pad_border_x+join_axis.saddr_x-1;
                 if (tmp == join_axis.caddr_x+join_dims.caddr_w-1)
                 {
-                    wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1);
-                    waddch(join_srv.pad_border, ACS_PLUS);
+                    mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                 }
                 else
                 {
                     
                     if (tmp == join_axis.btns_border_x)
                     {
-                        wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1);
-                        waddch(join_srv.pad_border, ACS_PLUS);
+                        mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                     }
                     else
                     {
                         if (tmp == join_axis.btns_border_x + join_axis.btns_x[1]-1)
                         {
-                            wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1);
-                            waddch(join_srv.pad_border, ACS_PLUS);
+                            mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                         }
                         else
                         {
                             if (tmp == join_axis.btns_border_x + join_axis.btns_x[2]-1)
                             {
-                                wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1);
-                                waddch(join_srv.pad_border, ACS_PLUS);
+                                mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                             }
                             else
                             {
-                                wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1);
-                                waddch(join_srv.pad_border, ACS_BTEE);
+                                mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_BTEE);
                             }
                         }
                     }
@@ -1081,49 +994,37 @@ int _draw_window(int wnd_type)
                 tmp = (join_axis.pad_border_x+join_axis.susers_x-1);
                 if ((join_axis.pad_border_x+join_axis.susers_x-1) == join_axis.btns_border_x)
                 {
-                    wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.susers_x-1);
-                    waddch(join_srv.pad_border, ACS_PLUS);
+                    mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.susers_x-1, ACS_PLUS);
                 }
                 else
                 {
-                    wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.susers_x-1);
-                    waddch(join_srv.pad_border, ACS_BTEE);
+                    mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.susers_x-1, ACS_BTEE);
                 }
 
-                wmove(join_srv.caddr_w, 0, join_dims.lbl_w+1);
-                waddch(join_srv.caddr_w, ACS_BSSS);
+                mvwaddch(join_srv.caddr_w, 0, join_dims.lbl_w+1, ACS_BSSS);
+                mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_dims.pad_border_w-1, ACS_RTEE);
+                mvwvline(join_srv.caddr_w, 1, join_dims.lbl_w+1, ACS_VLINE, join_dims.tb_h);
+                mvwvline(join_srv.btns_border, 1, join_axis.btns_x[1]-1, ACS_VLINE, join_dims.btns_h);
+                mvwvline(join_srv.btns_border, 1, join_axis.btns_x[2]-1, ACS_VLINE, join_dims.btns_h);
 
-                wmove(join_srv.pad_border, join_dims.pad_border_h-1, join_dims.pad_border_w-1);
-                waddch(join_srv.pad_border, ACS_RTEE);
-
-                wmove(join_srv.caddr_w, 1, join_dims.lbl_w+1);
-                wvline(join_srv.caddr_w, ACS_VLINE, join_dims.tb_h);
-                wmove(join_srv.btns_border, 1, join_axis.btns_x[1]-1);
-                wvline(join_srv.btns_border, ACS_VLINE, join_dims.btns_h);
-                wmove(join_srv.btns_border, 1, join_axis.btns_x[2]-1);
-                wvline(join_srv.btns_border, ACS_VLINE, join_dims.btns_h);
-
-                wmove(join_srv.caddr_w, join_dims.caddr_h-1, join_dims.lbl_w+1);
-                waddch(join_srv.caddr_w, ACS_BTEE);
+                mvwaddch(join_srv.caddr_w, join_dims.caddr_h-1, join_dims.lbl_w+1, ACS_BTEE);
                 if (join_axis.caddr_x+join_dims.caddr_w-1 == join_axis.btns_border_x)
                 {
-                    wmove(join_srv.btns_border, join_dims.btns_border_h-1, 0);
-                    waddch(join_srv.btns_border, ACS_BTEE);
+                    mvwaddch(join_srv.btns_border, join_dims.btns_border_h-1, 0, ACS_BTEE);
                 }
-                wmove(join_srv.btns_border, join_dims.btns_border_h-1, join_axis.btns_x[1]-1);
-                waddch(join_srv.btns_border, ACS_BTEE);
-                wmove(join_srv.btns_border, join_dims.btns_border_h-1, join_axis.btns_x[2]-1);
-                waddch(join_srv.btns_border, ACS_BTEE);
-
-                _update_window();
+                mvwaddch(join_srv.btns_border, join_dims.btns_border_h-1, join_axis.btns_x[1]-1, ACS_BTEE);
+                mvwaddch(join_srv.btns_border, join_dims.btns_border_h-1, join_axis.btns_x[2]-1, ACS_BTEE);
             }
             break;
         case WND_CREATE_SRV:
             {
                 if (wnd_type == cur_wnd)
                 {
-                    delwin(note_sw);
-                    delwin(note_w);
+                    wclear(stdscr);
+                    refresh();
+
+                    delwin(global_wnds.note_sw);
+                    delwin(global_wnds.note_w);
 
                     delwin(create_srv.auto_port_w);
                     delwin(create_srv.lcl_addr_w);
@@ -1133,6 +1034,10 @@ int _draw_window(int wnd_type)
                     delwin(create_srv.musers_w);
                     delwin(create_srv.sname_w);
 
+                    for (index = 0; index < 7; ++index)
+                    {
+                        delwin(create_srv.pad_elems[index].wnd);
+                    }
                     delwin(create_srv.srv_info_sw);
                     for (index = 0; index < 3; ++index)
                     {
@@ -1142,32 +1047,44 @@ int _draw_window(int wnd_type)
 
                     delwin(create_srv.srv_info_w);
                     delwin(create_srv.pad_border);
-                    delwin(wnd);
+                    delwin(global_wnds.wnd);
 
-                    wnd = NULL;
+                    global_wnds.wnd = NULL;
 
                     create_srv.pad_border = NULL;
                     create_srv.srv_info_w = NULL;
                     create_srv.pad = NULL;
-                    
-                    create_srv.sname_w = NULL;
-                    create_srv.musers_w = NULL;
-                    create_srv.rusers_w = NULL;
-                    create_srv.addr_w = NULL;
-                    create_srv.port_w = NULL;
-                    create_srv.lcl_addr_w = NULL;
-                    create_srv.auto_port_w = NULL;
 
+                    for (index = 0; index < 7; ++index)
+                    {
+                        create_srv.pad_elems[index].wnd = NULL;
+                    }
                     for (index = 0; index < 3; ++index)
                     {
                         create_srv.btns[index].wnd = NULL;
                     }
 
-                    note_w = NULL;
-                    note_sw = NULL;
+                    global_wnds.note_w = NULL;
+                    global_wnds.note_sw = NULL;
                 }
                 else
                 {
+                    create_srv.pad_elems[0].lbl = malloc(strlen(CREATE_SCR_SRV_NAME_LABEL)+1);
+                    create_srv.pad_elems[1].lbl = malloc(strlen(CREATE_SCR_CONN_USERS_LABEL)+1);
+                    create_srv.pad_elems[2].lbl = malloc(strlen(CREATE_SCR_RESTR_USERS_LABEL)+1);
+                    create_srv.pad_elems[3].lbl = malloc(strlen(CREATE_SCR_SRV_ADDR_LABEL)+1);
+                    create_srv.pad_elems[4].lbl = malloc(strlen(CREATE_SCR_SRV_PORT_LABEL)+1);
+                    create_srv.pad_elems[5].lbl = malloc(strlen(CREATE_SCR_LCL_ADDR_LABEL)+1);
+                    create_srv.pad_elems[6].lbl = malloc(strlen(CREATE_SCR_AUTO_PORT_LABEL)+1);
+
+                    strcpy(create_srv.pad_elems[0].lbl, CREATE_SCR_SRV_NAME_LABEL);
+                    strcpy(create_srv.pad_elems[1].lbl, CREATE_SCR_CONN_USERS_LABEL);
+                    strcpy(create_srv.pad_elems[2].lbl, CREATE_SCR_RESTR_USERS_LABEL);
+                    strcpy(create_srv.pad_elems[3].lbl, CREATE_SCR_SRV_ADDR_LABEL);
+                    strcpy(create_srv.pad_elems[4].lbl, CREATE_SCR_SRV_PORT_LABEL);
+                    strcpy(create_srv.pad_elems[5].lbl, CREATE_SCR_LCL_ADDR_LABEL);
+                    strcpy(create_srv.pad_elems[6].lbl, CREATE_SCR_AUTO_PORT_LABEL);
+
                     create_srv.btns[0].lbl = malloc(strlen(CREATE_SCR_CREATE_BTN_LABEL)+1);
                     create_srv.btns[1].lbl = malloc(strlen(CREATE_SCR_DEFAULT_BTN_LABEL)+1);
                     create_srv.btns[2].lbl = malloc(strlen(CREATE_SCR_CLEAR_BTN_LABEL)+1);
@@ -1175,13 +1092,11 @@ int _draw_window(int wnd_type)
                     strcpy(create_srv.btns[0].lbl, CREATE_SCR_CREATE_BTN_LABEL);
                     strcpy(create_srv.btns[1].lbl, CREATE_SCR_DEFAULT_BTN_LABEL);
                     strcpy(create_srv.btns[2].lbl, CREATE_SCR_CLEAR_BTN_LABEL);
-
-                    cur_wnd = WND_CREATE_SRV;
                 }
 
-                wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
+                global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
                 
-                create_srv.srv_info_w = derwin(wnd, create_dims.srv_info_h, create_dims.srv_info_w, create_axis.srv_info_y, create_axis.srv_info_x);
+                create_srv.srv_info_w = derwin(global_wnds.wnd, create_dims.srv_info_h, create_dims.srv_info_w, create_axis.srv_info_y, create_axis.srv_info_x);
 
                 create_srv.srv_info_sw = derwin(create_srv.srv_info_w, create_dims.srv_info_sw_h, create_dims.pad_elem_w, create_axis.srv_info_sw_y, create_axis.srv_info_sw_x);
                 create_srv.pad_border = derwin(create_srv.srv_info_w, create_dims.pad_border_h, create_dims.pad_border_w, create_axis.pad_border_y, create_axis.pad_border_x);
@@ -1191,104 +1106,93 @@ int _draw_window(int wnd_type)
 
                 create_srv.pad = newpad(create_dims.pad_h, create_dims.pad_w);
 
-                create_srv.sname_w = subpad(create_srv.pad, create_dims.sname_h, create_dims.sname_w, create_axis.sname_y, create_axis.sname_x);
-                create_srv.musers_w = subpad(create_srv.pad, create_dims.musers_h, create_dims.musers_w, create_axis.musers_y, create_axis.musers_x);
-                create_srv.rusers_w = subpad(create_srv.pad, create_dims.rusers_h, create_dims.rusers_w, create_axis.rusers_y, create_axis.rusers_x);
-                create_srv.addr_w = subpad(create_srv.pad, create_dims.saddr_h, create_dims.saddr_w, create_axis.saddr_y, create_axis.saddr_x);
-                create_srv.port_w = subpad(create_srv.pad, create_dims.sport_h, create_dims.sport_w, create_axis.sport_y, create_axis.sport_x);
-                create_srv.lcl_addr_w = subpad(create_srv.pad, create_dims.lcl_addr_h, create_dims.lcl_addr_w, create_axis.lcl_addr_y, create_axis.lcl_addr_x);
-                create_srv.auto_port_w = subpad(create_srv.pad, create_dims.auto_port_h, create_dims.auto_port_w, create_axis.auto_port_y, create_axis.auto_port_x);
+                for (index = 0; index < 7; ++index)
+                {
+                    create_srv.pad_elems[index].wnd = subpad(create_srv.pad, create_dims.pad_elem_h, create_dims.pad_elem_w, create_axis.pad_elems_y[index], create_axis.pad_elems_x[index]);
+                }
 
-                note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
-                note_sw = derwin(note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
+                global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
+                global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
 
-                box(wnd, ACS_VLINE, ACS_HLINE);
+                box(global_wnds.wnd, ACS_VLINE, ACS_HLINE);
                 box(create_srv.srv_info_w, ACS_VLINE, ACS_HLINE);
                 box(create_srv.pad_border, ACS_VLINE, ACS_HLINE);
                 box(create_srv.btns[0].wnd, ACS_VLINE, ACS_HLINE);
                 box(create_srv.btns[1].wnd, ACS_VLINE, ACS_HLINE);
                 box(create_srv.btns[2].wnd, ACS_VLINE, ACS_HLINE);
-                box(note_w, ' ', ' ');
+                box(global_wnds.note_w, ' ', ' ');
 
-                // wbkgd(create_srv.srv_info_w, COLOR_PAIR(2));
-                // wbkgd(create_srv.srv_info_sw, COLOR_PAIR(2));
-                // wbkgd(create_srv.pad_border, COLOR_PAIR(3));
-                // wbkgd(create_srv.pad, COLOR_PAIR(2));
+                mvwprintw(global_wnds.wnd, 0, ((global_dims.wnd_w-strlen(CREATE_SCR_LABEL))/2), CREATE_SCR_LABEL);
 
-                wmove(wnd, 0, (global_dims.wnd_w/2)-strlen(CREATE_SCR_LABEL)/2);
-                wprintw(wnd, CREATE_SCR_LABEL);
                 wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, "Default name", "Not restricted", "127.0.0.1:27015");
-                wprintw(create_srv.sname_w, CREATE_SCR_SRV_NAME_LABEL);
-                wprintw(create_srv.musers_w, CREATE_SCR_CONN_USERS_LABEL);
-                wprintw(create_srv.rusers_w, CREATE_SCR_RESTR_USERS_LABEL);
-                wprintw(create_srv.addr_w, CREATE_SCR_SRV_ADDR_LABEL);
-                wprintw(create_srv.port_w, CREATE_SCR_SRV_PORT_LABEL);
-                wprintw(create_srv.lcl_addr_w, CREATE_SCR_LCL_ADDR_LABEL);
-                wprintw(create_srv.auto_port_w, CREATE_SCR_AUTO_PORT_LABEL);
+                for (index = 0; index < 7; ++index)
+                {
+                    mvwprintw(create_srv.pad_elems[index].wnd, 0, 0, create_srv.pad_elems[index].lbl);
+                }
                 for (index = 0; index < 3; ++index)
                 {
-                    wmove(create_srv.btns[index].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[index].lbl)/2);
-                    if (index == create_srv.selection)
-                    {
-                        wattron(create_srv.btns[index].wnd, A_BOLD | A_UNDERLINE);
-                        wprintw(create_srv.btns[index].wnd, "%s", create_srv.btns[index].lbl);
-                        wattroff(create_srv.btns[index].wnd, A_BOLD | A_UNDERLINE);
-                    }
-                    else
-                        wprintw(create_srv.btns[index].wnd, "%s", create_srv.btns[index].lbl);
+                    mvwprintw(create_srv.btns[index].wnd, 1, (create_dims.btns_w-strlen(create_srv.btns[index].lbl))/2, create_srv.btns[index].lbl);
                 }
-                wmove(create_srv.btns[1].wnd, 0, 0);
-                waddch(create_srv.btns[1].wnd, ACS_BSSS);
-                wmove(create_srv.btns[1].wnd, create_dims.btns_h-1, 0);
-                waddch(create_srv.btns[1].wnd, ACS_BTEE);
-                wmove(create_srv.btns[2].wnd, 0, 0);
-                waddch(create_srv.btns[2].wnd, ACS_BSSS);
-                wmove(create_srv.btns[2].wnd, create_dims.btns_h-1, 0);
-                waddch(create_srv.btns[2].wnd, ACS_BTEE);
+                switch (create_srv.mode)
+                {
+                    case MODE_PAD:
+                        wattron(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                        wattroff(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                        // mvwaddch(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim, ACS_VLINE);
+                        break;
+                    case MODE_BUTTONS:
+                        wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                        mvwprintw(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w-strlen(create_srv.btns[create_srv.selection].lbl))/2, create_srv.btns[create_srv.selection].lbl);
+                        wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                        break;
+                    default:
+                        break;
+                }
 
-                wmove(create_srv.pad_border, 0, create_axis.pad_vdelim+1);
-                waddch(create_srv.pad_border, ACS_BSSS);
-                wmove(create_srv.pad, 0, create_axis.pad_vdelim);
-                wvline(create_srv.pad, ACS_VLINE, create_dims.pad_h);
-                // for(index = create_dims.pad_elem_h; index < create_dims.pad_border_h; index+=2)
-                // {
-                //     wmove(create_srv.pad_border, index+create_dims.pad_elem_h, 0);
-                //     waddch(create_srv.pad_border, ACS_LTEE);
-                //     wmove(create_srv.pad_border, index+create_dims.pad_elem_h, create_dims.pad_border_w-1);
-                //     waddch(create_srv.pad_border, ACS_RTEE);
-                // }
+                mvwaddch(create_srv.btns[1].wnd, 0, 0, ACS_BSSS);
+                mvwaddch(create_srv.btns[1].wnd, create_dims.btns_h-1, 0, ACS_BTEE);
+                mvwaddch(create_srv.btns[2].wnd, 0, 0, ACS_BSSS);
+                mvwaddch(create_srv.btns[2].wnd, create_dims.btns_h-1, 0, ACS_BTEE);
+                mvwaddch(create_srv.pad_border, 0, create_axis.pad_vdelim+1, ACS_BSSS);
+                mvwvline(create_srv.pad, 0, create_axis.pad_vdelim, ACS_VLINE, create_dims.pad_h);
                 for(index = create_dims.pad_elem_h; index < create_dims.pad_h; index+=2)
                 {
                     if (index < create_dims.pad_border_h-1)
                     {
-                        wmove(create_srv.pad_border, index+create_dims.pad_elem_h, 0);
-                        waddch(create_srv.pad_border, ACS_LTEE);
+                        mvwaddch(create_srv.pad_border, index+create_dims.pad_elem_h, 0, ACS_LTEE);
                     }
-                    
-                    wmove(create_srv.pad, index, 0);
-                    whline(create_srv.pad, ACS_HLINE, create_dims.pad_w);
-                    wmove(create_srv.pad, index, create_axis.pad_vdelim);
-                    waddch(create_srv.pad,ACS_PLUS);
+                    mvwhline(create_srv.pad, index, 0, ACS_HLINE, create_dims.pad_w);
+                    mvwaddch(create_srv.pad, index, create_axis.pad_vdelim, ACS_PLUS);
                     if (index < create_dims.pad_border_h-1)
                     {
-                        wmove(create_srv.pad_border, index+create_dims.pad_elem_h, create_dims.pad_border_w-1);
-                        waddch(create_srv.pad_border, ACS_RTEE);
+                        mvwaddch(create_srv.pad_border, index+create_dims.pad_elem_h, create_dims.pad_border_w-1, ACS_RTEE);
                     }
                     
                 }
-                wmove(create_srv.pad_border, create_dims.pad_border_h-1, create_axis.pad_vdelim+1);
-                waddch(create_srv.pad_border, ACS_BTEE);
+                mvwaddch(create_srv.pad_border, create_dims.pad_border_h-1, create_axis.pad_vdelim+1, ACS_BTEE);
 
-                wmove(note_sw, 0, ((global_dims.note_w-2)/2)-strlen(CREATE_SCR_NOTE)/2);
-                wprintw(note_sw, CREATE_SCR_NOTE);
-
-                _update_window();
+                mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.create_srv.size)/2), note_labels.create_srv.text);
             }
             break;
         case WND_PREFS:
             break;
         default:
             ret = EXIT_FAILURE;
+            break;
+    }
+
+    switch (ret)
+    {
+        case EXIT_SUCCESS:
+            {
+                cur_wnd = wnd_type;
+                _update_window();
+                keypad(global_wnds.wnd, true);
+            }
+            break;
+        case EXIT_FAILURE:
+        default:
             break;
     }
 
@@ -1306,7 +1210,7 @@ int _update_window(void)
             break;
         case WND_MAIN_MENU:
             {
-                wnoutrefresh(wnd);
+                wnoutrefresh(global_wnds.wnd);
                 wnoutrefresh(main_menu.header_w);
                 wnoutrefresh(main_menu.status_w);
                 wnoutrefresh(main_menu.btns_border);
@@ -1317,34 +1221,36 @@ int _update_window(void)
                 wnoutrefresh(main_menu.btns[1].wnd);
                 wnoutrefresh(main_menu.btns[2].wnd);
                 wnoutrefresh(main_menu.btns[3].wnd);
-                wnoutrefresh(note_w);
-                wnoutrefresh(note_sw);
+                wnoutrefresh(global_wnds.note_w);
+                wnoutrefresh(global_wnds.note_sw);
                 wnoutrefresh(stdscr);
             }
             break;
         case WND_JOIN_SRV:
             {
-                wnoutrefresh(wnd);
+                wnoutrefresh(global_wnds.wnd);
                 wnoutrefresh(join_srv.top_panel);
-                wnoutrefresh(join_srv.pad_border);
-                wnoutrefresh(join_srv.caddr_w);
                 wnoutrefresh(join_srv.sname_w);
                 wnoutrefresh(join_srv.saddr_w);
                 wnoutrefresh(join_srv.susers_w);
+                wnoutrefresh(join_srv.pad_border);
+                wnoutrefresh(join_srv.servers_pad);
+                wnoutrefresh(join_srv.caddr_w);
                 wnoutrefresh(join_srv.label_w);
                 wnoutrefresh(join_srv.tb_w);
+                wnoutrefresh(join_srv.btns_border);
                 wnoutrefresh(join_srv.btns[0].wnd);
                 wnoutrefresh(join_srv.btns[1].wnd);
                 wnoutrefresh(join_srv.btns[2].wnd);
-                wnoutrefresh(note_w);
-                wnoutrefresh(note_sw);
-                pnoutrefresh(join_srv.servers_pad, join_srv.vis_line, 0, join_axis.vis_pad_ys, join_axis.vis_pad_xs, join_axis.vis_pad_ye, join_axis.vis_pad_xe);
+                wnoutrefresh(global_wnds.note_w);
+                wnoutrefresh(global_wnds.note_sw);
+                pnoutrefresh(join_srv.servers_pad, join_axis.pad_ys, join_axis.pad_xs, join_axis.vis_pad_ys, join_axis.vis_pad_xs, join_axis.vis_pad_ye, join_axis.vis_pad_xe);
                 wnoutrefresh(stdscr);
             }
             break;
         case WND_CREATE_SRV:
             {
-                wnoutrefresh(wnd);
+                wnoutrefresh(global_wnds.wnd);
                 wnoutrefresh(create_srv.srv_info_w);
                 wnoutrefresh(create_srv.srv_info_sw);
                 wnoutrefresh(create_srv.pad);
@@ -1358,9 +1264,9 @@ int _update_window(void)
                 wnoutrefresh(create_srv.btns[0].wnd);
                 wnoutrefresh(create_srv.btns[1].wnd);
                 wnoutrefresh(create_srv.btns[2].wnd);
-                wnoutrefresh(note_w);
-                wnoutrefresh(note_sw);
-                pnoutrefresh(create_srv.pad, create_srv.vis_line, 0, create_axis.vis_pad_ys, create_axis.vis_pad_xs, create_axis.vis_pad_ye, create_axis.vis_pad_xe);
+                wnoutrefresh(global_wnds.note_w);
+                wnoutrefresh(global_wnds.note_sw);
+                pnoutrefresh(create_srv.pad, create_axis.pad_ys, create_axis.pad_xs, create_axis.vis_pad_ys, create_axis.vis_pad_xs, create_axis.vis_pad_ye, create_axis.vis_pad_xe);
                 wnoutrefresh(stdscr);
             }
             break;
@@ -1388,8 +1294,8 @@ int _delete_window(void)
             break;
         case WND_MAIN_MENU:
             {
-                delwin(note_sw);
-                delwin(note_w);
+                delwin(global_wnds.note_sw);
+                delwin(global_wnds.note_w);
                 delwin(main_menu.panel_sw);
                 delwin(main_menu.panel_w);
                 for (index = 0; index < 4; ++index)
@@ -1402,9 +1308,9 @@ int _delete_window(void)
                 delwin(main_menu.status_sw);
                 delwin(main_menu.status_w);
                 delwin(main_menu.header_w);
-                delwin(wnd);
+                delwin(global_wnds.wnd);
 
-                wnd = NULL;
+                global_wnds.wnd = NULL;
                 main_menu.header_w = NULL;
                 main_menu.status_w = NULL;
                 main_menu.status_sw = NULL;
@@ -1416,8 +1322,8 @@ int _delete_window(void)
                 }
                 main_menu.panel_w = NULL;
                 main_menu.panel_sw = NULL;
-                note_w = NULL;
-                note_sw = NULL;
+                global_wnds.note_w = NULL;
+                global_wnds.note_sw = NULL;
 
                 main_menu.selection = 0;
 
@@ -1426,8 +1332,8 @@ int _delete_window(void)
             break;
         case WND_JOIN_SRV:
             {
-                delwin(note_sw);
-                delwin(note_w);
+                delwin(global_wnds.note_sw);
+                delwin(global_wnds.note_w);
                 for (index = 0; index < 3; ++index)
                 {
                     if (join_srv.btns[index].lbl != NULL)
@@ -1444,9 +1350,9 @@ int _delete_window(void)
                 delwin(join_srv.saddr_w);
                 delwin(join_srv.sname_w);
                 delwin(join_srv.top_panel);
-                delwin(wnd);
+                delwin(global_wnds.wnd);
 
-                wnd = NULL;
+                global_wnds.wnd = NULL;
                 join_srv.top_panel = NULL;
                 join_srv.saddr_w = NULL;
                 join_srv.susers_w = NULL;
@@ -1462,21 +1368,16 @@ int _delete_window(void)
                     join_srv.btns[index].wnd = NULL;
                     join_srv.btns[index].lbl = NULL;
                 }
-                note_w = NULL;
-                note_sw = NULL;
-
-                join_srv.vis_line = 0;
-                join_srv.line = 0;
-                join_srv.selection = 0;
-                join_srv.mode = 0;
+                global_wnds.note_w = NULL;
+                global_wnds.note_sw = NULL;
 
                 cur_wnd = WND_NONE;
             }
             break;
         case WND_CREATE_SRV:
             {
-                delwin(note_sw);
-                delwin(note_w);
+                delwin(global_wnds.note_sw);
+                delwin(global_wnds.note_w);
 
                 delwin(create_srv.auto_port_w);
                 delwin(create_srv.lcl_addr_w);
@@ -1485,7 +1386,12 @@ int _delete_window(void)
                 delwin(create_srv.rusers_w);
                 delwin(create_srv.musers_w);
                 delwin(create_srv.sname_w);
-
+                for (index = 0; index < 7; ++index)
+                {
+                    if (create_srv.pad_elems[index].lbl != NULL)
+                        free(create_srv.pad_elems[index].lbl);
+                    delwin(create_srv.pad_elems[index].wnd);
+                }
                 delwin(create_srv.srv_info_sw);
                 for (index = 0; index < 3; ++index)
                 {
@@ -1497,9 +1403,9 @@ int _delete_window(void)
 
                 delwin(create_srv.srv_info_w);
                 delwin(create_srv.pad_border);
-                delwin(wnd);
+                delwin(global_wnds.wnd);
 
-                wnd = NULL;
+                global_wnds.wnd = NULL;
 
                 create_srv.pad_border = NULL;
                 create_srv.srv_info_w = NULL;
@@ -1519,10 +1425,8 @@ int _delete_window(void)
                     create_srv.btns[index].lbl = NULL;
                 }
 
-                note_w = NULL;
-                note_sw = NULL;
-
-                create_srv.selection = 0;
+                global_wnds.note_w = NULL;
+                global_wnds.note_sw = NULL;
 
                 cur_wnd = WND_NONE;
             }
@@ -1579,7 +1483,6 @@ int popup_wnd(char *str, int type, ...)
     if (popup_sw_h == 3)
         wmove(popup_sw, 0, ((popup_sw_w)-strlen(str))/2);
     wprintw(popup_sw, "%s", str);
-    // wprintw(popup_sw, "%d|%d", popup_sw_h, popup_sw_w);
 
     wmove(popup_sw, popup_sw_h-1, ((popup_sw_w)/2));
     wattron(popup_sw, A_BLINK);
@@ -1606,8 +1509,15 @@ int popup_wnd(char *str, int type, ...)
             break;
     }
 
+    wclear(popup_w);
+
+    wnoutrefresh(popup_w);
+    doupdate();
+
     delwin(popup_sw);
     delwin(popup_w);
+
+    _draw_window(cur_wnd);
 
     return ret;
 }
@@ -1621,15 +1531,13 @@ int menu_wnd(int *option)
 
     _draw_window(WND_MAIN_MENU);
 
-    keypad(wnd, true);
 	while(ret != -1)
 	{
-		symbol = wgetch(wnd);
+		symbol = wgetch(global_wnds.wnd);
 
         if ('\t' == symbol)
 		{
-            wmove(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[main_menu.selection].lbl)/2);
-            wprintw(main_menu.btns[main_menu.selection].wnd, "%s", main_menu.btns[main_menu.selection].lbl);
+            mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
 
 			if (main_menu.selection == 3)
                 main_menu.selection = 0;
@@ -1637,8 +1545,7 @@ int menu_wnd(int *option)
                 main_menu.selection++;
 
             wattron(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
-            wmove(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[main_menu.selection].lbl)/2);
-            wprintw(main_menu.btns[main_menu.selection].wnd, "%s", main_menu.btns[main_menu.selection].lbl);
+            mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
             wattroff(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
 
             _update_window();
@@ -1647,14 +1554,12 @@ int menu_wnd(int *option)
 		{
 			if (main_menu.selection > 0)
             {
-                wmove(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[main_menu.selection].lbl)/2);
-                wprintw(main_menu.btns[main_menu.selection].wnd, "%s", main_menu.btns[main_menu.selection].lbl);
+                mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
 
                 main_menu.selection--;
 
                 wattron(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[main_menu.selection].lbl)/2);
-                wprintw(main_menu.btns[main_menu.selection].wnd, "%s", main_menu.btns[main_menu.selection].lbl);
+                mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
                 wattroff(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
 
                 _update_window();
@@ -1664,14 +1569,12 @@ int menu_wnd(int *option)
 		{
 			if (main_menu.selection < 3)
             {
-                wmove(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[main_menu.selection].lbl)/2);
-                wprintw(main_menu.btns[main_menu.selection].wnd, "%s", main_menu.btns[main_menu.selection].lbl);
+                mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
 
                 main_menu.selection++;
 
                 wattron(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w/2)-strlen(main_menu.btns[main_menu.selection].lbl)/2);
-                wprintw(main_menu.btns[main_menu.selection].wnd, "%s", main_menu.btns[main_menu.selection].lbl);
+                mvwprintw(main_menu.btns[main_menu.selection].wnd, 1, (mmenu_dims.btns_w-strlen(main_menu.btns[main_menu.selection].lbl))/2, main_menu.btns[main_menu.selection].lbl);
                 wattroff(main_menu.btns[main_menu.selection].wnd, A_BOLD | A_UNDERLINE);
 
                 _update_window();
@@ -1724,6 +1627,7 @@ int menu_wnd(int *option)
 			break;
 		}
 	}
+
     _delete_window();
 
     return ret;
@@ -1734,51 +1638,42 @@ int join_srv_wnd(int *option)
     int symbol;
     int index;
     int ret = 0;
+    
     join_srv.mode = MODE_LIST;
+    join_srv.line = 0;
     join_srv.selection = *option-1;
 
+    join_dims.pad_h = sizeof(arr);
+    join_axis.pad_ys = 0;
+    join_axis.pad_xs = 0;
+    join_axis.pad_ye = join_dims.vis_pad_h - 1;
+    join_axis.pad_xe = join_dims.vis_pad_w - 1;
+
     _draw_window(WND_JOIN_SRV);
-    
-// scrollok(mainpad, true);
-                
-    keypad(wnd, true);
+
     while(1)
     {
-        symbol = wgetch(wnd);
+        symbol = wgetch(global_wnds.wnd);
         if ('\n' == symbol) 
         {
-            // WINDOW * sub_pad = newwin(10,40, global_dims.wnd_h/2, global_dims.wnd_w/2);
-            // box(sub_pad, ACS_VLINE, ACS_HLINE);
-            // wmove(sub_pad, 1, 1);
-            // wbkgd(sub_pad, COLOR_PAIR(2));
-            // wprintw(sub_pad, "%c", arr[join_srv.line]);
-            
-            // wrefresh(sub_pad);
-            // wgetch(wnd);
-            // delwin(sub_pad);
             char ch = arr[join_srv.line];
             popup_wnd(&ch, POPUP_W_WAIT);
-            _update_window();
         }
         else if ('\t' == symbol)
         {
             switch (join_srv.mode)
             {
                 case MODE_LIST:
-                    wmove(join_srv.servers_pad, join_srv.line, 0);
-                    whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                    wmove(join_srv.servers_pad, join_srv.line, 0);
-                    wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                    wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                    waddch(join_srv.servers_pad, ACS_VLINE);
-                    wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                    waddch(join_srv.servers_pad, ACS_VLINE);
+                    mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                    mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                    mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                    mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
 
                     join_srv.mode = MODE_TEXTBOX;
                     
                     move(global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y, global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x);
+                    wmove(join_srv.tb_w, 0, 0);
                     curs_set(1);
-                    _update_window();
                     break;
                 case MODE_TEXTBOX:
                     curs_set(0);
@@ -1786,50 +1681,41 @@ int join_srv_wnd(int *option)
                     join_srv.mode = MODE_LIST;
 
                     wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                    wmove(join_srv.servers_pad, join_srv.line, 0);
-                    whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                    wmove(join_srv.servers_pad, join_srv.line, 0);
-                    wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                    wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                    waddch(join_srv.servers_pad, ACS_VLINE);
-                    wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                    waddch(join_srv.servers_pad, ACS_VLINE);
+                    mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                    mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                    mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                    mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
                     wattroff(join_srv.servers_pad, COLOR_PAIR(2));
-                    _update_window();
                     break;
                 default:
                     break;
             }
+            _update_window();
             
         }
         else if (KEY_UP == symbol)
         {
             if (join_srv.line > 0)
             {
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
+                mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
 
                 join_srv.line--;
 
                 wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
+                mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
                 wattroff(join_srv.servers_pad, COLOR_PAIR(2));
 
-                if (join_srv.line <= join_srv.vis_line)
-                    join_srv.vis_line--;
+                if (join_srv.line < join_axis.pad_ys)
+                {
+                    join_axis.pad_ys += join_srv.line - join_axis.pad_ys;
+                    join_axis.pad_ye = join_axis.pad_ys + join_dims.vis_pad_h - 1;
+                }
 
                 _update_window();
             }
@@ -1838,14 +1724,12 @@ int join_srv_wnd(int *option)
 		{
 			if (join_srv.selection > 0)
             {
-                wmove(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w/2)-strlen(join_srv.btns[join_srv.selection].lbl)/2);
-                wprintw(join_srv.btns[join_srv.selection].wnd, "%s", join_srv.btns[join_srv.selection].lbl);
+                mvwprintw(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w-strlen(join_srv.btns[join_srv.selection].lbl))/2, join_srv.btns[join_srv.selection].lbl);
 
                 join_srv.selection--;
 
                 wattron(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w/2)-strlen(join_srv.btns[join_srv.selection].lbl)/2);
-                wprintw(join_srv.btns[join_srv.selection].wnd, "%s", join_srv.btns[join_srv.selection].lbl);
+                mvwprintw(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w-strlen(join_srv.btns[join_srv.selection].lbl))/2, join_srv.btns[join_srv.selection].lbl);
                 wattroff(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
 
                 _update_window();
@@ -1855,14 +1739,12 @@ int join_srv_wnd(int *option)
 		{
 			if (join_srv.selection < 2)
             {
-                wmove(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w/2)-strlen(join_srv.btns[join_srv.selection].lbl)/2);
-                wprintw(join_srv.btns[join_srv.selection].wnd, "%s", join_srv.btns[join_srv.selection].lbl);
+                mvwprintw(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w-strlen(join_srv.btns[join_srv.selection].lbl))/2, join_srv.btns[join_srv.selection].lbl);
 
                 join_srv.selection++;
 
                 wattron(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w/2)-strlen(join_srv.btns[join_srv.selection].lbl)/2);
-                wprintw(join_srv.btns[join_srv.selection].wnd, "%s", join_srv.btns[join_srv.selection].lbl);
+                mvwprintw(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w-strlen(join_srv.btns[join_srv.selection].lbl))/2, join_srv.btns[join_srv.selection].lbl);
                 wattroff(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
 
                 _update_window();
@@ -1872,30 +1754,25 @@ int join_srv_wnd(int *option)
         {
             if (join_srv.line < (sizeof(arr))-1)
             {
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
+                mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
 
                 join_srv.line++;
 
                 wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
+                mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%c", arr[join_srv.line]);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
                 wattroff(join_srv.servers_pad, COLOR_PAIR(2));
 
-                if ((join_srv.line + join_dims.pad_h) <= sizeof(arr))
-                    join_srv.vis_line = join_srv.line;
+                if (join_srv.line > join_axis.pad_ye)
+                {
+                    join_axis.pad_ys += join_srv.line - join_axis.pad_ye;
+                    join_axis.pad_ye = join_axis.pad_ys + join_dims.vis_pad_h - 1;
+                }
 
                 _update_window();
             }
@@ -1924,48 +1801,78 @@ int create_srv_wnd()
     int symbol;
     int index;
     int ret = EXIT_SUCCESS;
+
+    create_srv.mode = MODE_PAD;
+    create_srv.line = 0;
     create_srv.selection = 0;
+
+    create_axis.pad_ys = 0;
+    create_axis.pad_xs = 0;
+    create_axis.pad_ye = create_dims.vis_pad_h - 1;
+    create_axis.pad_xe = create_dims.vis_pad_w - 1;
 
     _draw_window(WND_CREATE_SRV);
 
-    keypad(wnd, true);
-    // TODO: Write the correct algorithm to process keypress on create server screen, add ys,xs,ye,xe for pad window for correct scrolling
     while(1)
     {
-        symbol = wgetch(wnd);
+        symbol = wgetch(global_wnds.wnd);
         if ('\n' == symbol) 
         {
             _update_window();
         }
+        else if ('\t' == symbol)
+        {
+            switch (create_srv.mode)
+            {
+                case MODE_PAD:
+                    mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                    wmove(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim);
+                    waddch(create_srv.pad_elems[create_srv.line].wnd, ACS_VLINE);
+
+                    create_srv.mode = MODE_BUTTONS;
+                    
+                    wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                    wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
+                    wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
+                    wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                    break;
+                case MODE_BUTTONS:
+                    wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
+                    wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
+
+                    create_srv.mode = MODE_PAD;
+
+                    wattron(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                    mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                    wattroff(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                    wmove(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim);
+                    waddch(create_srv.pad_elems[create_srv.line].wnd, ACS_VLINE);
+                    break;
+                default:
+                    break;
+            }
+            _update_window();
+            
+        }
         else if (KEY_UP == symbol)
         {
-            continue;
-            if (join_srv.line > 0)
+            if (create_srv.line > 0)
             {
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
+                mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                mvwaddch(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim, ACS_VLINE);
 
-                join_srv.line--;
+                create_srv.line--;
 
-                wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
+                wattron(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                wattroff(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                mvwaddch(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim, ACS_VLINE);
 
-                if (join_srv.line <= join_srv.vis_line)
-                    join_srv.vis_line--;
+                if (create_srv.line < create_axis.pad_ys)
+                {
+                    create_axis.pad_ys += create_srv.line - create_axis.pad_ys;
+                    create_axis.pad_ye = create_axis.pad_ys + create_dims.vis_pad_h - 1;
+                }
 
                 _update_window();
             }
@@ -1974,14 +1881,12 @@ int create_srv_wnd()
 		{
 			if (create_srv.selection > 0)
             {
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
+                mvwprintw(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w-strlen(create_srv.btns[create_srv.selection].lbl))/2, create_srv.btns[create_srv.selection].lbl);
 
                 create_srv.selection--;
 
                 wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
+                mvwprintw(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w-strlen(create_srv.btns[create_srv.selection].lbl))/2, create_srv.btns[create_srv.selection].lbl);
                 wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
 
                 _update_window();
@@ -1991,14 +1896,12 @@ int create_srv_wnd()
 		{
 			if (create_srv.selection < 2)
             {
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
+                mvwprintw(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w-strlen(create_srv.btns[create_srv.selection].lbl))/2, create_srv.btns[create_srv.selection].lbl);
 
                 create_srv.selection++;
 
                 wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
+                mvwprintw(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w-strlen(create_srv.btns[create_srv.selection].lbl))/2, create_srv.btns[create_srv.selection].lbl);
                 wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
 
                 _update_window();
@@ -2006,33 +1909,23 @@ int create_srv_wnd()
 		}
         else if (KEY_DOWN == symbol)
         {
-            continue;
-            if (join_srv.line < (sizeof(arr))-1)
+            if (create_srv.line < 6)
             {
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
+                mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                mvwaddch(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim, ACS_VLINE);
 
-                join_srv.line++;
+                create_srv.line++;
 
-                wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
+                wattron(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                mvwprintw(create_srv.pad_elems[create_srv.line].wnd, 0, 0, create_srv.pad_elems[create_srv.line].lbl);
+                wattroff(create_srv.pad_elems[create_srv.line].wnd, A_UNDERLINE | A_BOLD);
+                mvwaddch(create_srv.pad_elems[create_srv.line].wnd, 0, create_axis.pad_vdelim, ACS_VLINE);
 
-                if ((join_srv.line + join_dims.pad_h) <= sizeof(arr))
-                    join_srv.vis_line = join_srv.line;
+                if (create_srv.line > create_axis.pad_ye)
+                {
+                    create_axis.pad_ys += create_srv.line - create_axis.pad_ye;
+                    create_axis.pad_ye = create_axis.pad_ys + create_dims.vis_pad_h - 1;
+                }
 
                 _update_window();
             }
@@ -2061,329 +1954,16 @@ int prefs_wnd()
     int symbol;
     int index;
     int ret = EXIT_SUCCESS;
-    // create_srv.selection = 0;
 
     _draw_window(WND_PREFS);
 
-    keypad(wnd, true);
     while(1)
     {
-        symbol = wgetch(wnd);
-        if ('\n' == symbol) 
-        {
-            _update_window();
-        }
-        else if (KEY_UP == symbol)
-        {
-            continue;
-            if (join_srv.line > 0)
-            {
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-
-                join_srv.line--;
-
-                wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
-
-                if (join_srv.line <= join_srv.vis_line)
-                    join_srv.vis_line--;
-
-                _update_window();
-            }
-        }
-        else if (KEY_LEFT == symbol)
-		{
-            continue;
-			if (create_srv.selection > 0)
-            {
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
-
-                create_srv.selection--;
-
-                wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
-                wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-
-                _update_window();
-            }
-		}
-		else if (KEY_RIGHT == symbol)
-		{
-            continue;
-			if (create_srv.selection < 2)
-            {
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
-
-                create_srv.selection++;
-
-                wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                wmove(create_srv.btns[create_srv.selection].wnd, 1, (create_dims.btns_w/2)-strlen(create_srv.btns[create_srv.selection].lbl)/2);
-                wprintw(create_srv.btns[create_srv.selection].wnd, "%s", create_srv.btns[create_srv.selection].lbl);
-                wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-
-                _update_window();
-            }
-		}
-        else if (KEY_DOWN == symbol)
-        {
-            continue;
-            if (join_srv.line < (sizeof(arr))-1)
-            {
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-
-                join_srv.line++;
-
-                wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                whline(join_srv.servers_pad, ' ', join_dims.pad_w);
-                wmove(join_srv.servers_pad, join_srv.line, 0);
-                wprintw(join_srv.servers_pad, "%c", arr[join_srv.line]);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wmove(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2);
-                waddch(join_srv.servers_pad, ACS_VLINE);
-                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
-
-                if ((join_srv.line + join_dims.pad_h) <= sizeof(arr))
-                    join_srv.vis_line = join_srv.line;
-
-                _update_window();
-            }
-        }
-        else if (KEY_F(3) == symbol)
-		{
-            ret = 3;
-			break;
-		}
-        else if (KEY_F(4) == symbol)
-        {
-            ret = 0;
-            break;
-        }
-        else
-        {}
+        symbol = wgetch(global_wnds.wnd);
+        break;
     }
 
     _delete_window();
 
     return ret;
-    // WINDOW *mainpad;
-    // WINDOW *pad_border;
-    // WINDOW *note_wnd;
-    // WINDOW *note_subwnd;
-    // int symbol;
-    // int index;
-    // int ret = 0;
-
-    // char arr[] = {
-    //     '1','2','3','4','5','6','7','8','9','0'//,'q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l',';'
-    // };
-
-    // int border_h = wnd_h-2-elem_h;
-    // int border_w = wnd_w-2-(GFX_ELEM_HOFF*2);
-
-    // int pad_h = border_h-2;
-    // int pad_w = border_w-2;
-    
-    // int line = 0;
-    // int vis_line = 0;
-
-    // wnd = newwin(wnd_h, wnd_w, (size.ws_row/2)-(wnd_h/2), (size.ws_col/2)-(wnd_w/2));
-    // pad_border = derwin(wnd, border_h, border_w, 1+GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
-    // mainpad = newpad((sizeof(arr)+1) > pad_h ? (sizeof(arr)+1) : pad_h, pad_w);
-    // note_wnd = derwin(wnd, elem_h, border_w, wnd_h-1-elem_h-GFX_ELEM_VOFF, 1+GFX_ELEM_HOFF);
-    // note_subwnd = derwin(note_wnd, 1, border_w-4, 1, 1);
-    
-
-    // box(wnd, ACS_VLINE, ACS_HLINE);
-    // box(pad_border, ACS_VLINE, ACS_HLINE);
-    // box(note_wnd, ' ', ' ');
-
-    // wmove(wnd, 0, (wnd_w/2)-strlen(PREFS_SCR_LABEL)/2);
-    // wprintw(wnd, PREFS_SCR_LABEL);
-    // // wmove(wnd, subwnd_h-3, (wnd_w/2)-strlen(PREFS_SCR_NOTE)/2);
-    // // wprintw(wnd, PREFS_SCR_NOTE);
-    // wmove(note_subwnd, 0, ((border_w-4)/2)-(prefs_note_size/2));
-    // wprintw(note_subwnd, "%s", prefs_note_label);
-
-    // wmove(pad_border, 0, pad_w-pad_w/3);
-    // waddch(pad_border, ACS_BSSS);
-    // wmove(pad_border, (border_h-1), pad_w-pad_w/3);
-    // waddch(pad_border, ACS_BTEE);
-
-    // wattron(mainpad, COLOR_PAIR(2));
-    // wmove(mainpad, 0, 0);
-    // whline(mainpad, ' ', pad_w-pad_w/3-1);
-    // wmove(mainpad, 0, 0);
-    // wprintw(mainpad, "%c", arr[0]);
-    // wattroff(mainpad, COLOR_PAIR(2));
-    // wmove(mainpad, 0, pad_w-pad_w/3-1);
-    // waddch(mainpad, ACS_VLINE);
-    
-    // // wattron(mainpad, A_STANDOUT);
-    // // wprintw(mainpad, "%c", arr[0]);
-    // // wattroff(mainpad, A_STANDOUT);
-    // // wmove(mainpad, 0, pad_w-pad_w/3-1);
-    // // wprintw(mainpad, "|");
-
-    // for (index = 1; index < sizeof(arr); index++)
-    // {
-    //     // wmove(mainpad, i, 0);
-    //     // wprintw(mainpad, "%c", arr[i]);
-    //     wmove(mainpad, index, 0);
-    //     whline(mainpad, ' ', pad_w-pad_w/3-1);
-    //     wmove(mainpad, index, 0);
-    //     wprintw(mainpad, "%c", arr[index]);
-    //     wmove(mainpad, index, pad_w-pad_w/3-1);
-    //     waddch(mainpad, ACS_VLINE);
-    // }
-    // for (; index < pad_h; index++)
-    // {
-    //     wmove(mainpad, index, pad_w-pad_w/3-1);
-    //     waddch(mainpad, ACS_VLINE);
-    // }
-
-    // // for (index = 1; index < sizeof(arr); index++)
-    // // {
-    // //     wmove(mainpad, index, 0);
-    // //     wprintw(mainpad, "%c", arr[index]);
-
-    // //     wmove(mainpad, i, pad_w-pad_w/3-1);
-    // //     wprintw(mainpad, "|");
-    // // }
-
-    // // wbkgd(mainpad, COLOR_PAIR(2));
-
-    // wrefresh(wnd);
-    // prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-5, size.ws_col);
-
-    // scrollok(mainpad, true);
-    // keypad(wnd, true);
-    
-    // while(1)
-    // {
-    //     symbol = wgetch(wnd);
-    //     if ('\n' == symbol) 
-    //     {
-    //         WINDOW * sub_pad = newwin(10,40, wnd_h/2, wnd_w/2);
-    //         box(sub_pad, ACS_VLINE, ACS_HLINE);
-    //         wmove(sub_pad, 1, 1);
-    //         wbkgd(sub_pad, COLOR_PAIR(2));
-    //         wprintw(sub_pad, "%c", arr[line]);
-    //         wrefresh(sub_pad);
-    //         wgetch(wnd);
-    //         delwin(sub_pad);
-    //         wrefresh(wnd);
-    //         prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
-    //     }
-    //     else if (KEY_F(1) == symbol)
-	// 	{
-    //         ret = 1;
-	// 		break;
-	// 	}
-    //     else if (KEY_F(2) == symbol)
-	// 	{
-    //         ret = 2;
-	// 		break;
-	// 	}
-    //     else if (KEY_F(3) == symbol)
-	// 	{
-    //         ret = 3;
-	// 		break;
-	// 	}
-    //     else if (KEY_F(4) == symbol)
-	// 	{
-    //         ret = 0;
-	// 		break;
-	// 	}
-    //     else if (KEY_UP == symbol)
-	// 	{
-    //         if (line > 0)
-    //         {
-    //             wmove(mainpad, line, 0);
-    //             whline(mainpad, ' ', pad_w-pad_w/3-1);
-    //             wmove(mainpad, line, 0);
-    //             wprintw(mainpad, "%c", arr[line]);
-    //             wmove(mainpad, line, pad_w-pad_w/3-1);
-    //             waddch(mainpad, ACS_VLINE);
-
-    //             line--;
-
-    //             wattron(mainpad, COLOR_PAIR(2));
-    //             wmove(mainpad, line, 0);
-    //             whline(mainpad, ' ', pad_w-pad_w/3-1);
-    //             wmove(mainpad, line, 0);
-    //             wprintw(mainpad, "%c", arr[line]);
-    //             wattroff(mainpad, COLOR_PAIR(2));
-    //             wmove(mainpad, line, pad_w-pad_w/3-1);
-    //             waddch(mainpad, ACS_VLINE);
-
-    //             if (line <= vis_line)
-    //                 vis_line--;
-
-    //             prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
-    //         }
-	// 	}
-	// 	/* if ARROW_KEY_DOWN is pressed -> navigate in the directory */
-	// 	else if (KEY_DOWN == symbol)
-	// 	{
-    //         if (line < (sizeof(arr))-1)
-    //         {
-    //             wmove(mainpad, line, 0);
-    //             whline(mainpad, ' ', pad_w-pad_w/3-1);
-    //             wmove(mainpad, line, 0);
-    //             wprintw(mainpad, "%c", arr[line]);
-    //             wmove(mainpad, line, pad_w-pad_w/3-1);
-    //             waddch(mainpad, ACS_VLINE);
-
-    //             line++;
-
-    //             wattron(mainpad, COLOR_PAIR(2));
-    //             wmove(mainpad, line, 0);
-    //             whline(mainpad, ' ', pad_w-pad_w/3-1);
-    //             wmove(mainpad, line, 0);
-    //             wprintw(mainpad, "%c", arr[line]);
-    //             wattroff(mainpad, COLOR_PAIR(2));
-    //             wmove(mainpad, line, pad_w-pad_w/3-1);
-    //             waddch(mainpad, ACS_VLINE);
-
-    //             if ((line + pad_h) <= sizeof(arr))
-    //                 vis_line = line;
-                
-    //             prefresh(mainpad, vis_line, 0, (size.ws_row/2)-(wnd_h/2)+2, (size.ws_col/2)-(wnd_w/2)+2+GFX_ELEM_HOFF, (size.ws_row/2)+(wnd_h/2)-6, size.ws_col);
-    //         }
-	// 	}
-    // }
-    // delwin(mainpad);
-    // delwin(wnd);
-
-    // wnd = NULL;
-
-    // return ret;
-    return 0;
 }

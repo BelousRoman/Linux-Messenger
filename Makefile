@@ -1,4 +1,4 @@
-MSG_BIN := msgrux
+MSG_BIN := mux
 SRV_BIN := srvmain
 HEADERS := hdr/*.h libs/*.h
 SOURCES := src/*.c libs/*.c
@@ -9,6 +9,7 @@ LIBS := -lcurses -lrt -pthread
 # $(pkg-config ncursesw --libs --cflags)
 
 all: app srv
+	clear
 
 app: messenger.c $(SOURCES)
 	$(CC) -o $(MSG_BIN) messenger.c $(SOURCES) $(CFLAGS) $(LIBS)

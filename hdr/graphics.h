@@ -1,6 +1,7 @@
 #ifndef _GRAPHICS_H
 #define _GRAPHICS_H
-
+// global_wnds.
+// mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_disconnected.size)/2), note_labels.mmenu_disconnected.text);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,7 @@
 // #define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF4: Quit"
 #define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF2: Reconnect\tF3: Disconnect\tF4: Quit"
 #define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF2: Connect\tF3: Change address\tF4: Quit"
+#define MENU_SCR_NOTE_CONNECTING        "F1: Help\tF4: Quit"
 #define MENU_SCR_CLT_BTN_LABEL          "Join server"
 #define MENU_SCR_SRV_BTN_LABEL          "Create a server"
 #define MENU_SCR_CFG_BTN_LABEL          "Configuration"
@@ -71,16 +73,8 @@
 #define JOIN_SCR_NOTE                   "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
 
 #define CREATE_SCR_LABEL                "Create server"
-#define CREATE_SCR_NOTE                 "F1: Help\tF3: Back\tF4: Quit"
-
-#define PREFS_SCR_LABEL                 "Preferences"
-// #define PREFS_SCR_NOTE                  "1\t2\t3\t4\t5\t6\t7"
-// #define sz "F3"
-#define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
-
-#define CREATE_SCR_LABEL                "Create server"
-#define CREATE_SCR_SRV_NAME_LABEL       "Server name"
 #define CREATE_SCR_SRV_INFO_TEMPLATE    "Server properties:\n* Server name:\t\t%s\n* Maximum users:\t%s\n* Address:\t\t%s"
+#define CREATE_SCR_SRV_NAME_LABEL       "Server name"
 #define CREATE_SCR_CONN_USERS_LABEL     "Maximum users"
 #define CREATE_SCR_RESTR_USERS_LABEL    "Users restriction"
 #define CREATE_SCR_SRV_ADDR_LABEL       "Address"
@@ -90,7 +84,12 @@
 #define CREATE_SCR_CREATE_BTN_LABEL     "Create"
 #define CREATE_SCR_DEFAULT_BTN_LABEL    "Default"
 #define CREATE_SCR_CLEAR_BTN_LABEL      "Clear"
-#define CREATE_SCR_NOTE                 "F1: Help\tF3: Back\tF4: Quit"
+#define CREATE_SCR_NOTE                 "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
+
+#define PREFS_SCR_LABEL                 "Preferences"
+// #define PREFS_SCR_NOTE                  "1\t2\t3\t4\t5\t6\t7"
+// #define sz "F3"
+#define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
 
 enum popup_wnd_type
 {
@@ -106,10 +105,26 @@ enum join_wnd_tab_mode
     MODE_TEXTBOX
 };
 
+enum create_wnd_tab_mode
+{
+    MODE_PAD = 1,
+    MODE_BUTTONS
+};
+
 struct label_t
 {
     char *text;
     int size;
+};
+
+struct note_labels_t
+{
+    struct label_t mmenu_connected;
+    struct label_t mmenu_disconnected;
+    struct label_t mmenu_connecting;
+    struct label_t join_srv;
+    struct label_t create_srv;
+    struct label_t prefs_wnd;
 };
 
 struct elem_wnd_t
@@ -138,6 +153,13 @@ struct global_axis_t
     int subwnd_x;
     int note_y;
     int note_x;
+};
+
+struct global_wnds_t
+{
+    WINDOW *wnd;
+    WINDOW *note_w;
+    WINDOW *note_sw;
 };
 
 struct mmenu_dims_t
@@ -256,7 +278,7 @@ struct join_wnd_t
     struct server_info_t *servers;
     int servers_count;
     int line;
-    int vis_line;
+    // int vis_line;
     int selection;
     int mode;
 };
@@ -310,8 +332,8 @@ struct create_axis_t
     int pad_xs;
     int pad_ye;
     int pad_xe;
-    int pad_elems_y[3];
-    int pad_elems_x[3];
+    int pad_elems_y[7];
+    int pad_elems_x[7];
     int sname_y;
     int sname_x;
     int musers_y;
@@ -349,8 +371,9 @@ struct create_wnd_t
     struct elem_wnd_t btns[3];
     
     int line;
-    int vis_line;
+    // int vis_line;
     int selection;
+    int mode;
 };
 
 struct cfg_dims_t
@@ -369,7 +392,7 @@ extern int connection_flag;
 /* Global variable, used to store terminal's size in columns and rows */
 extern struct winsize size;
 
-void init_graphics();
+int init_graphics();
 void deinit_graphics();
 
 void handle_msg(union sigval);
