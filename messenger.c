@@ -125,16 +125,18 @@ int main(void)
     char mq_name[23];
     struct mq_attr attr;
     struct sigevent sev;
-    int option = 1;
+    int option = WND_MAIN_MENU;
+    int run_flag = 1;
     int ret = EXIT_SUCCESS;
-    init_graphics();
-    menu_wnd(&option);
-    option = 1;
-    join_srv_wnd(&option);
-    option = 1;
-    create_srv_wnd();
-    deinit_graphics();
-    return 0;
+    // init_graphics();
+    // menu_wnd(&option);
+    // option = 1;
+    // join_srv_wnd(&option);
+    // option = 1;
+    // create_srv_wnd();
+    // prefs_wnd();
+    // deinit_graphics();
+    // return 0;
     sigfillset(&sa.sa_mask);
     sa.sa_sigaction = sigalrm_handler;
     if (sigaction(SIGALRM, &sa, NULL) == -1)
@@ -189,41 +191,71 @@ int main(void)
     // popup_wnd(ch, 1);
 
     pthread_create(&tid, NULL, _net_thread, NULL);
-    ret = 1;
-    while(option > 0)
+    while(run_flag)
     {
-        ret = menu_wnd(&option);
         switch (option)
         {
-            case 1:
-                if (connection_flag)
-                {
+            case WND_NONE:
+                run_flag = 0;
+                break;
+            case WND_MAIN_MENU:
+                ret = menu_wnd(&option);
+                break;
+            case WND_JOIN_SRV:
+                // if (connection_flag == STATUS_CONNECTED)
                     ret = join_srv_wnd(&option);
-                }
-                else
-                {
-                    popup_wnd("Not connected", POPUP_W_WAIT);
-                }
+                // else
+                //     popup_wnd("Not connected", POPUP_W_WAIT);
                 break;
-            case 2:
-                if (connection_flag)
-                {
-                    // ret = create_srv_wnd();
-                }
-                else
-                {
-                    popup_wnd("Not connected", POPUP_W_WAIT);
-                }
+            case WND_CREATE_SRV:
+                // if (connection_flag == STATUS_CONNECTED)
+                    ret = create_srv_wnd(&option);
+                // else
+                //     popup_wnd("Not connected", POPUP_W_WAIT);
                 break;
-            case 3:
-                // ret = prefs_wnd();
-                break;
-            case -1:
-                /* code */
+            case WND_PREFS:
+                ret = prefs_wnd(&option);
                 break;
             default:
                 break;
         }
+
+        if (ret != 0)
+        {
+            break;
+        }
+        
+        // switch (option)
+        // {
+        //     case 1:
+        //         if (connection_flag)
+        //         {
+        //             ret = join_srv_wnd(&option);
+        //         }
+        //         else
+        //         {
+        //             popup_wnd("Not connected", POPUP_W_WAIT);
+        //         }
+        //         break;
+        //     case 2:
+        //         if (connection_flag)
+        //         {
+        //             ret = create_srv_wnd(&option);
+        //         }
+        //         else
+        //         {
+        //             popup_wnd("Not connected", POPUP_W_WAIT);
+        //         }
+        //         break;
+        //     case 3:
+        //         ret = prefs_wnd(&option);
+        //         break;
+        //     case -1:
+        //         /* code */
+        //         break;
+        //     default:
+        //         break;
+        // }
     }
     
     pthread_cancel(tid);

@@ -33,8 +33,8 @@ int connect_to_main_server(int *fd)
     int ret = EXIT_SUCCESS;
 
 	/* Set 'ts' time to define-constants */
-	ts.tv_sec = 0;
-	ts.tv_nsec = 500000000;
+	ts.tv_sec = NET_RECV_RETRY_PAUSE_SEC;
+	ts.tv_nsec = NET_RECV_RETRY_PAUSE_NSEC;
 
 	/* Fill 'server' with 0's */
 	memset(&server, 0, sizeof(server));
@@ -58,14 +58,14 @@ int connect_to_main_server(int *fd)
         return EXIT_FAILURE;
     }
 
-	for (index = 0; index < 10; ++index)
+	for (index = 0; index < NET_RECV_RETRIES; ++index)
 	{
 		if (connect(pfd.fd, (struct sockaddr *)&server, sizeof(server))
 			== -1)
 		{
-            printf("connect: %s(%d)\n", strerror(errno), errno);
+            // printf("connect: %s(%d)\n", strerror(errno), errno);
 			if ((errno != ECONNREFUSED && errno != ENOENT) ||
-				index == (10 - 1))
+				index == (NET_RECV_RETRIES - 1))
 			{
 				return EXIT_FAILURE;
 			}
@@ -127,7 +127,7 @@ int client_send(int comm, int wait_flag, ...)
 
         break;
     case CONNECT_COMM:
-        if (connection_flag != STATUS_DISCONNECTED)
+        if (connection_flag != STATUS_DISCONNECTED || pfd.fd <= 0)
             return EXIT_FAILURE;
         connection_flag = STATUS_CONNECTING;
         alarm(5);
@@ -307,7 +307,7 @@ int client_recv(int comm, int mode)
         pthread_mutex_lock(&recv_mutex);
         if (recv(pfd.fd, &msg, sizeof(msg), 0) == -1)
         {
-            printf("1 recv: %d %s(%d)\n", comm, strerror(errno), errno);
+            // printf("recv: %d %s(%d)\n", comm, strerror(errno), errno);
             pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
@@ -316,16 +316,16 @@ int client_recv(int comm, int mode)
     case RECV_TIMEOUT:
         struct timespec ts;
         /* Set 'ts' time to define-constants */
-        ts.tv_sec = 0;
-        ts.tv_nsec = 100000000;
+        ts.tv_sec = NET_RECV_RETRY_PAUSE_SEC;
+        ts.tv_nsec = NET_RECV_RETRY_PAUSE_NSEC;
         pthread_mutex_lock(&recv_mutex);
-        for (index = 0; index < 10; ++index)
+        for (index = 0; index < NET_RECV_RETRIES; ++index)
         {
             if (recv(pfd.fd, &msg, sizeof(msg), MSG_DONTWAIT) == -1)
             {
                 if (errno != EAGAIN)
                 {
-                    printf("2 recv %d: %s(%d)\n", comm, strerror(errno), errno);
+                    // printf("recv %d: %s(%d)\n", comm, strerror(errno), errno);
                     pthread_mutex_unlock(&recv_mutex);
                     return EXIT_FAILURE;
                 }
@@ -336,9 +336,9 @@ int client_recv(int comm, int mode)
             }
             nanosleep(&ts, NULL);
         }
-        if (index == (10 - 1))
+        if (index == (NET_RECV_RETRIES - 1))
         {
-            printf("3 recv %d: %s(%d)\n", comm, strerror(errno), errno);
+            // printf("recv %d: %s(%d)\n", comm, strerror(errno), errno);
             pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;
         }
@@ -349,8 +349,7 @@ int client_recv(int comm, int mode)
         {
             if (errno != EBUSY)
             {
-                printf("4 recv %d: %s(%d)\n", comm, strerror(errno), errno);
-                printf("is connected: %d\n", connection_flag);
+                // printf("recv %d: %s(%d)\n", comm, strerror(errno), errno);
             }
             return EXIT_FAILURE;
         }
@@ -358,8 +357,7 @@ int client_recv(int comm, int mode)
         {
             if (errno != EAGAIN)
             {
-                printf("5 recv %d: %s(%d)\n", comm, strerror(errno), errno);
-                printf("is connected: %d\n", connection_flag);
+                // printf("recv %d: %s(%d)\n", comm, strerror(errno), errno);
             }
             pthread_mutex_unlock(&recv_mutex);
             return EXIT_FAILURE;

@@ -27,6 +27,10 @@
 #define NET_SYSTEM_ERR                  2
 #define NET_SOFTWARE_ERR                1
 
+#define NET_RECV_RETRY_PAUSE_SEC        0
+#define NET_RECV_RETRY_PAUSE_NSEC       500000000
+#define NET_RECV_RETRIES                10
+
 enum connection_status
 {
     STATUS_DISCONNECTED,

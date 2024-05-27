@@ -1,7 +1,6 @@
 #ifndef _GRAPHICS_H
 #define _GRAPHICS_H
-// global_wnds.
-// mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.mmenu_disconnected.size)/2), note_labels.mmenu_disconnected.text);
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,15 +51,13 @@
 
 #define MENU_SCR_LABEL                  "Welcome to Linux Messenger"
 #define MENU_SCR_NOTE_LABEL             "Shortcuts:"
-// #define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF4: Quit"
-// #define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF4: Quit"
-#define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF2: Reconnect\tF3: Disconnect\tF4: Quit"
-#define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF2: Connect\tF3: Change address\tF4: Quit"
-#define MENU_SCR_NOTE_CONNECTING        "F1: Help\tF4: Quit"
 #define MENU_SCR_CLT_BTN_LABEL          "Join server"
 #define MENU_SCR_SRV_BTN_LABEL          "Create a server"
 #define MENU_SCR_CFG_BTN_LABEL          "Configuration"
 #define MENU_SCR_QUIT_BTN_LABEL         "Quit"
+#define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF2: Reconnect\tF3: Disconnect\tF4: Quit"
+#define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF2: Connect\tF3: Change address\tF4: Quit"
+#define MENU_SCR_NOTE_CONNECTING        "F1: Help\tF4: Quit"
 
 #define JOIN_SCR_LABEL                  "Join server"
 #define JOIN_SCR_SRV_NAME_LABEL         "Server name"
@@ -87,9 +84,16 @@
 #define CREATE_SCR_NOTE                 "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
 
 #define PREFS_SCR_LABEL                 "Preferences"
-// #define PREFS_SCR_NOTE                  "1\t2\t3\t4\t5\t6\t7"
-// #define sz "F3"
 #define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
+
+enum cur_wnd_enum
+{
+    WND_NONE = 0,
+    WND_MAIN_MENU,
+    WND_JOIN_SRV,
+    WND_CREATE_SRV,
+    WND_PREFS
+};
 
 enum popup_wnd_type
 {
@@ -378,13 +382,33 @@ struct create_wnd_t
 
 struct cfg_dims_t
 {
+    int pad_border_h;
+    int pad_border_w;
+    int vis_pad_h;
+    int vis_pad_w;
     int pad_h;
     int pad_w;
+};
+
+struct cfg_axis_t
+{
+    int pad_border_y;
+    int pad_border_x;
+    int vis_pad_ys;
+    int vis_pad_xs;
+    int vis_pad_ye;
+    int vis_pad_xe;
+    int pad_ys;
+    int pad_xs;
+    int pad_ye;
+    int pad_xe;
 };
 
 struct cfg_wnd_t
 {
     WINDOW *pad;
+    WINDOW *pad_border;
+    int line;
 };
 
 extern int connection_flag;
@@ -402,8 +426,8 @@ int popup_wnd(char *, int, ...);
 int menu_wnd(int *);
 
 int join_srv_wnd(int *);
-int create_srv_wnd();
+int create_srv_wnd(int *);
 
-int prefs_wnd();
+int prefs_wnd(int *);
 
 #endif // _GRAPHICS_H
