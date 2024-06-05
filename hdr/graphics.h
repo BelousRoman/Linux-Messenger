@@ -49,8 +49,10 @@
 #define ELEM_MIN_W                      ELEM_DEF_W
 #define ELEM_DEF_W                      20
 
+#define LABEL_LEN                       20
+
 #define MENU_SCR_LABEL                  "Welcome to Linux Messenger"
-#define MENU_SCR_NOTE_LABEL             "Shortcuts:"
+#define MENU_SCR_NOTE_LABEL             "ACS Characters:"
 #define MENU_SCR_CLT_BTN_LABEL          "Join server"
 #define MENU_SCR_SRV_BTN_LABEL          "Create a server"
 #define MENU_SCR_CFG_BTN_LABEL          "Configuration"
@@ -84,6 +86,12 @@
 #define CREATE_SCR_NOTE                 "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
 
 #define PREFS_SCR_LABEL                 "Preferences"
+#define PREFS_USERNAME_LABEL            "Username"
+#define PREFS_LANG_LABEL                "Language"
+#define PREFS_IP_LABEL                  "IP Address"
+#define PREFS_PORT_LABEL                "Port"
+#define PREFS_LANG_EN_LABEL             "English"
+#define PREFS_LANG_RU_LABEL             "Russian"
 #define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
 
 enum cur_wnd_enum
@@ -115,10 +123,24 @@ enum create_wnd_tab_mode
     MODE_BUTTONS
 };
 
+enum cfg_entry_type
+{
+    CFG_TYPE_STRING = 1,
+    CFG_TYPE_INT,
+    CFG_TYPE_FLOAT,
+    CFG_TYPE_LIST
+};
+
 struct label_t
 {
-    char *text;
     int size;
+    char *text;
+};
+
+struct string_t
+{
+    int str_len;
+    char text[LABEL_LEN+1];
 };
 
 struct note_labels_t
@@ -135,6 +157,34 @@ struct elem_wnd_t
 {
     WINDOW *wnd;
     char *lbl;
+};
+
+struct option_t
+{
+    int value;
+    int str_len;
+    char option[LABEL_LEN+1];
+};
+
+struct list_t
+{
+    int size;
+    struct option_t *options;
+};
+
+struct cfg_entry_t
+{
+    struct elem_wnd_t entry;
+    int type;
+    void *value_ptr;
+    int ptr_size;
+    int selection;
+    int str_len;
+    union
+    {
+        struct list_t value_list;
+        struct string_t value_str;
+    };
 };
 
 struct global_dims_t
@@ -388,6 +438,9 @@ struct cfg_dims_t
     int vis_pad_w;
     int pad_h;
     int pad_w;
+    int entry_h;
+    int entry_w;
+    int entry_hspacer;
 };
 
 struct cfg_axis_t
@@ -402,12 +455,17 @@ struct cfg_axis_t
     int pad_xs;
     int pad_ye;
     int pad_xe;
+    int entries_y[4];
+    int entries_x[4];
+    int fields_x[4];
+    int vdelim_x;
 };
 
 struct cfg_wnd_t
 {
-    WINDOW *pad;
     WINDOW *pad_border;
+    WINDOW *pad;
+    struct cfg_entry_t entries[4];
     int line;
 };
 

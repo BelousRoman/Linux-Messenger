@@ -157,8 +157,8 @@ int main(void)
 
     read_config();
 
-    connect_to_main_server();
-    client_send(CONNECT_COMM, WAIT_TRUE, RECV_TIMEOUT);
+    if (connect_to_main_server() != EXIT_FAILURE)
+        client_send(CONNECT_COMM, WAIT_TRUE, RECV_TIMEOUT);
 
     snprintf(mq_name, 22, "/client%d_ntg", config.id);
     mq_unlink(mq_name);

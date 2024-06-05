@@ -101,6 +101,9 @@ int client_send(int comm, int wait_flag, ...)
     va_list ap;
     int ret = EXIT_SUCCESS;
 
+    if (pfd.fd <= 0)
+        return EXIT_FAILURE;
+
     va_start(ap, wait_flag);
 
     memset(&msg, NULL, sizeof(msg));

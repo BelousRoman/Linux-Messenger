@@ -28,8 +28,8 @@
 #define NET_SOFTWARE_ERR                1
 
 #define NET_RECV_RETRY_PAUSE_SEC        0
-#define NET_RECV_RETRY_PAUSE_NSEC       500000000
-#define NET_RECV_RETRIES                10
+#define NET_RECV_RETRY_PAUSE_NSEC       10000000
+#define NET_RECV_RETRIES                5
 
 enum connection_status
 {
@@ -103,9 +103,11 @@ struct client_info_t
 struct server_info_t
 {
     char server_name[NAME_LEN+1];
-    char ip[IP_ADDR_LEN+1];
     int host_id;
+    char ip[IP_ADDR_LEN+1];
     unsigned short port;
+    unsigned short max_users;
+    unsigned short cur_users;
 };
 
 struct join_srv_t
