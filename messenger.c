@@ -133,7 +133,7 @@ int main(void)
     // option = 1;
     // join_srv_wnd(&option);
     // option = 1;
-    // create_srv_wnd();
+    // create_srv_wnd(&option);
     // prefs_wnd();
     // deinit_graphics();
     // return 0;

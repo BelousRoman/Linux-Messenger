@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include <termios.h>
@@ -83,6 +84,10 @@
 #define CREATE_SCR_CREATE_BTN_LABEL     "Create"
 #define CREATE_SCR_DEFAULT_BTN_LABEL    "Default"
 #define CREATE_SCR_CLEAR_BTN_LABEL      "Clear"
+#define CREATE_DEF_SRV_NAME             "Default"
+#define CREATE_DEF_USR_RESTR            10
+#define CREATE_DEF_SRV_IP               "127.0.0.1"
+#define CREATE_DEF_SRV_PORT             27015
 #define CREATE_SCR_NOTE                 "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
 
 #define PREFS_SCR_LABEL                 "Preferences"
@@ -93,6 +98,9 @@
 #define PREFS_LANG_EN_LABEL             "English"
 #define PREFS_LANG_RU_LABEL             "Russian"
 #define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
+
+#define OPTIONS_TRUE_LABEL              "Yes"
+#define OPTIONS_FALSE_LABEL             "No"
 
 enum cur_wnd_enum
 {
@@ -125,10 +133,12 @@ enum create_wnd_tab_mode
 
 enum cfg_entry_type
 {
-    CFG_TYPE_STRING = 1,
-    CFG_TYPE_INT,
-    CFG_TYPE_FLOAT,
-    CFG_TYPE_LIST
+    ENTRY_TYPE_STRING = 1,
+    ENTRY_TYPE_SHORT,
+    ENTRY_TYPE_INT,
+    ENTRY_TYPE_FLOAT,
+    ENTRY_TYPE_OPTION,
+    ENTRY_TYPE_IP
 };
 
 struct label_t
@@ -156,7 +166,7 @@ struct note_labels_t
 struct elem_wnd_t
 {
     WINDOW *wnd;
-    char *lbl;
+    struct label_t lbl;
 };
 
 struct option_t
@@ -172,14 +182,14 @@ struct list_t
     struct option_t *options;
 };
 
-struct cfg_entry_t
+struct entry_t
 {
-    struct elem_wnd_t entry;
+    struct elem_wnd_t elem;
     int type;
     void *value_ptr;
     int ptr_size;
     int selection;
-    int str_len;
+    // int str_len;
     union
     {
         struct list_t value_list;
@@ -197,6 +207,7 @@ struct global_dims_t
     int elem_w;
     int note_h;
     int note_w;
+    int h_spacer;
 };
 
 struct global_axis_t
@@ -339,35 +350,21 @@ struct join_wnd_t
 
 struct create_dims_t
 {
-    int pad_elem_h;
-    int pad_elem_w;
-    int sname_h;
-    int sname_w;
-    int musers_h;
-    int musers_w;
-    int rusers_h;
-    int rusers_w;
-    int saddr_h;
-    int saddr_w;
-    int sport_h;
-    int sport_w;
-    int lcl_addr_h;
-    int lcl_addr_w;
-    int auto_port_h;
-    int auto_port_w;
-    int btns_h;
-    int btns_w;
     int vis_pad_h;
     int vis_pad_w;
     int pad_h;
     int pad_w;
     int pad_border_h;
     int pad_border_w;
+    int btns_h;
+    int btns_w;
+    int btns_border_h;
+    int btns_border_w;
+    int entry_h;
+    int entry_w;
     int srv_info_h;
     int srv_info_sw_h;
     int srv_info_w;
-    int subwnd_h;
-    int subwnd_w;
 };
 
 struct create_axis_t
@@ -386,23 +383,13 @@ struct create_axis_t
     int pad_xs;
     int pad_ye;
     int pad_xe;
-    int pad_elems_y[7];
-    int pad_elems_x[7];
-    int sname_y;
-    int sname_x;
-    int musers_y;
-    int musers_x;
-    int rusers_y;
-    int rusers_x;
-    int saddr_y;
-    int saddr_x;
-    int sport_y;
-    int sport_x;
-    int lcl_addr_y;
-    int lcl_addr_x;
-    int pad_vdelim;
-    int auto_port_y;
-    int auto_port_x;
+    int v_delim_x;
+    int entries_y[7];
+    int entries_x[7];
+    int labels_x[7];
+    int fields_x[7];
+    int btns_border_y;
+    int btns_border_x;
     int btns_y[3];
     int btns_x[3];
 };
@@ -414,18 +401,22 @@ struct create_wnd_t
     WINDOW *srv_info_sw;
     WINDOW *pad_border;
     WINDOW *pad;
-    struct elem_wnd_t pad_elems[7];
-    WINDOW *sname_w;
-    WINDOW *musers_w;
-    WINDOW *rusers_w;
-    WINDOW *addr_w;
-    WINDOW *port_w;
-    WINDOW *lcl_addr_w;
-    WINDOW *auto_port_w;
+    // struct elem_wnd_t pad_elems[7];
+    struct entry_t entries[7];
+    // WINDOW *sname_w;
+    // WINDOW *musers_w;
+    // WINDOW *rusers_w;
+    // WINDOW *addr_w;
+    // WINDOW *port_w;
+    // WINDOW *lcl_addr_w;
+    // WINDOW *auto_port_w;
+    WINDOW *btns_border;
     struct elem_wnd_t btns[3];
-    
+    struct server_info_t server;
+    int usr_restrict_flag;
+    int local_srv_flag;
+    int auto_port_flag;
     int line;
-    // int vis_line;
     int selection;
     int mode;
 };
@@ -458,14 +449,14 @@ struct cfg_axis_t
     int entries_y[4];
     int entries_x[4];
     int fields_x[4];
-    int vdelim_x;
+    int v_delim_x;
 };
 
 struct cfg_wnd_t
 {
     WINDOW *pad_border;
     WINDOW *pad;
-    struct cfg_entry_t entries[4];
+    struct entry_t entries[4];
     int line;
 };
 
