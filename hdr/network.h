@@ -94,7 +94,7 @@ struct command_t
 
 struct client_info_t
 {
-    char client_name[NAME_LEN+1];
+    char client_name[STR_LEN+1];
     int id;
     int client_type;
     int cur_server;
@@ -102,7 +102,7 @@ struct client_info_t
 
 struct server_info_t
 {
-    char server_name[NAME_LEN+1];
+    char server_name[STR_LEN+1];
     int host_id;
     char ip[IP_ADDR_LEN+1];
     unsigned short port;
@@ -112,7 +112,7 @@ struct server_info_t
 
 struct join_srv_t
 {
-    char client_name[NAME_LEN+1];
+    char client_name[STR_LEN+1];
     char ip[IP_ADDR_LEN+1];
     int usr_id;
     unsigned short port;

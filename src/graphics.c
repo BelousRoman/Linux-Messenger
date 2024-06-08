@@ -6,38 +6,40 @@ struct server_info_t servers_info[] = {
     {"Sample local server", 0, "127.0.0.1", 9999, 0, 0}
 };
 
-// char arr[] = {
-//     '1','2','3','4','5','6','7','8','9','0','q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l',';'
-// };
-
 /* Global variable, used to store terminal's size in columns and rows */
 struct winsize size;
 
 int cur_wnd = WND_NONE;
+
+struct cursor_t cursor = {0, 0, false};
 
 struct global_dims_t global_dims;
 struct mmenu_dims_t mmenu_dims;
 struct join_dims_t join_dims;
 struct create_dims_t create_dims;
 struct cfg_dims_t cfg_dims;
+struct chat_dims_t chat_dims;
 
 struct global_axis_t global_axis;
 struct mmenu_axis_t mmenu_axis;
 struct join_axis_t join_axis;
 struct create_axis_t create_axis;
 struct cfg_axis_t cfg_axis;
+struct chat_axis_t chat_axis;
 
 struct global_wnds_t global_wnds;
 struct mmenu_wnd_t main_menu;
 struct join_wnd_t join_srv;
 struct create_wnd_t create_srv;
-struct cfg_wnd_t cfg_wnd;
+struct cfg_wnd_t cfg_wnds;
+struct chat_wnd_t chat_wnds;
 
 struct note_labels_t note_labels;
 
 int _draw_window(int);
 int _update_window(void);
 int _delete_window(void);
+int _free_memory(int);
 
 /* Function to process signal, called on resizing terminal window */
 void sig_winch(int signo)
@@ -46,10 +48,7 @@ void sig_winch(int signo)
 	resize_term(size.ws_row, size.ws_col);
     _set_dimensions();
     _set_axis();
-    // wclear(curscr);
-    // _delete_window();
     _draw_window(cur_wnd);
-    // _update_window();
 }
 
 /* Function to handle message when new message in queue occurs */
@@ -158,16 +157,15 @@ void handle_msg(union sigval sv)
 	return EXIT_SUCCESS;
 }
 
-int _set_label(struct label_t *lbl, char *str)
+int _set_string(struct label_t *lbl, char *str)
 {
     char *tmp_label = NULL;
     int tmp_size = 0;
     int index;
     int sec_index;
-
-    int thrd_index;
-
     int ret = EXIT_SUCCESS;
+
+    lbl->size = 0;
 
     tmp_size = strlen(str);
 
@@ -204,6 +202,7 @@ int _set_label(struct label_t *lbl, char *str)
             index++;
         }
     }
+    lbl->text[index] = NULL;
 
     free(tmp_label);
 
@@ -214,12 +213,41 @@ int _set_labels()
 {
     int ret = EXIT_SUCCESS;
 
-    ret += _set_label(&note_labels.mmenu_connected, MENU_SCR_NOTE_CONNECTED);
-    ret += _set_label(&note_labels.mmenu_disconnected, MENU_SCR_NOTE_DISCONNECTED);
-    ret += _set_label(&note_labels.mmenu_connecting, MENU_SCR_NOTE_CONNECTING);
-    ret += _set_label(&note_labels.join_srv, JOIN_SCR_NOTE);
-    ret += _set_label(&note_labels.create_srv, CREATE_SCR_NOTE);
-    ret += _set_label(&note_labels.prefs_wnd, PREFS_SCR_NOTE);
+    ret += _set_string(&note_labels.mmenu_connected, MENU_SCR_NOTE_CONNECTED);
+    ret += _set_string(&note_labels.mmenu_disconnected, MENU_SCR_NOTE_DISCONNECTED);
+    ret += _set_string(&note_labels.mmenu_connecting, MENU_SCR_NOTE_CONNECTING);
+    ret += _set_string(&note_labels.join_srv, JOIN_SCR_NOTE);
+    ret += _set_string(&note_labels.create_srv, CREATE_SCR_NOTE);
+    ret += _set_string(&note_labels.prefs_wnd, PREFS_SCR_NOTE);
+    ret += _set_string(&note_labels.chat_wnd, CHAT_SCR_NOTE);
+
+    return ret;
+}
+
+int _put_char_at(char *str, int len, char ch, int pos)
+{
+    int index;
+    int ret = EXIT_SUCCESS;
+
+    for (index = len-1; index != pos; --index)
+    {
+        str[index] = str[index-1];
+    }
+    str[index] = ch;
+
+    return ret;
+}
+
+int _remove_char_at(char *str, int len, int pos)
+{
+    int index;
+    int ret = EXIT_SUCCESS;
+
+    for (index = pos; index < len-1; ++index)
+    {
+        str[index] = str[index+1];
+    }
+    str[index+1] = 0;
 
     return ret;
 }
@@ -308,7 +336,7 @@ int _set_dimensions()
 
         join_dims.pad_w = join_dims.vis_pad_w;
 
-        if (join_dims.sname_w < NAME_LEN)
+        if (join_dims.sname_w < STR_LEN)
             ret = EXIT_FAILURE;
     }
 
@@ -344,18 +372,44 @@ int _set_dimensions()
 
     /* Set dimensions that are used in preferences window */
     {
+        cfg_dims.entry_h = 1;
+        cfg_dims.entry_w = LABEL_LEN*2+global_dims.h_spacer*4+3;
+
         cfg_dims.pad_border_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*2);
-        // cfg_dims.pad_border_w = global_dims.wnd_w - 2 - (GFX_ELEM_HOFF*2);
-        cfg_dims.pad_border_w = LABEL_LEN*2+3+global_dims.h_spacer*3;
+        cfg_dims.pad_border_w = cfg_dims.entry_w + 2;
 
         cfg_dims.vis_pad_h = cfg_dims.pad_border_h - 2;
         cfg_dims.vis_pad_w = cfg_dims.pad_border_w - 2;
 
         cfg_dims.pad_h = cfg_dims.vis_pad_h;
         cfg_dims.pad_w = cfg_dims.vis_pad_w;
+    }
 
-        cfg_dims.entry_h = 1;
-        cfg_dims.entry_w = LABEL_LEN*2+global_dims.h_spacer+2;
+    /* Set dimensions that are used in chat window */
+    {
+        chat_dims.tb_h = 10;
+        chat_dims.tb_w = global_dims.wnd_w - 2 - (GFX_ELEM_HOFF*2);
+
+        chat_dims.usrs_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*3) - chat_dims.tb_h + 1;
+        chat_dims.usrs_w = STR_LEN + 4;
+
+        chat_dims.msg_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*3) - chat_dims.tb_h + 1;
+        chat_dims.msg_w = global_dims.wnd_w - 2 - (GFX_ELEM_HOFF*2) - chat_dims.usrs_w + 1;
+
+        chat_dims.vis_pad_h[0] = chat_dims.tb_h - 2;
+        chat_dims.vis_pad_w[0] = chat_dims.tb_w - 2;
+        chat_dims.pad_h[0] = chat_dims.vis_pad_h[0];
+        chat_dims.pad_w[0] = chat_dims.vis_pad_w[0];
+
+        chat_dims.vis_pad_h[1] = chat_dims.msg_h - 2;
+        chat_dims.vis_pad_w[1] = chat_dims.msg_w - 2;
+        chat_dims.pad_h[1] = chat_dims.vis_pad_h[1];
+        chat_dims.pad_w[1] = chat_dims.vis_pad_w[1];
+
+        chat_dims.vis_pad_h[2] = chat_dims.usrs_h - 2;
+        chat_dims.vis_pad_w[2] = chat_dims.usrs_w - 2;
+        chat_dims.pad_h[2] = chat_dims.vis_pad_h[2];
+        chat_dims.pad_w[2] = chat_dims.vis_pad_w[2];
     }
 
     return ret;
@@ -369,14 +423,9 @@ int _set_axis()
     {
         global_axis.wnd_y = 1+GFX_ELEM_VOFF;
         global_axis.wnd_x = 1+GFX_ELEM_HOFF;
-        // global_axis.wnd_y = 0;
-        // global_axis.wnd_x = 0;
-        // global_axis.subwnd_y = 0;
-        // global_axis.subwnd_x = 0;
+
         global_axis.note_y = global_axis.wnd_y+global_dims.wnd_h+(GFX_ELEM_VOFF*2);
         global_axis.note_x = 1+GFX_ELEM_HOFF;
-        // global_axis.note_y = global_axis.wnd_y+global_dims.wnd_h+(GFX_ELEM_VOFF*1);
-        // global_axis.note_x = 0;
     }
 
     /* Set axis that are used in main menu window */
@@ -497,8 +546,8 @@ int _set_axis()
         create_axis.labels_x[6] = global_dims.h_spacer;
         create_axis.fields_x[6] = create_axis.v_delim_x + 2 + global_dims.h_spacer;
 
-        create_axis.btns_border_y = create_dims.srv_info_h - 1 - create_dims.btns_border_h + GFX_ELEM_VOFF;
-        create_axis.btns_border_x = (create_dims.srv_info_w - create_dims.btns_border_w)/2 + 1 + GFX_ELEM_HOFF;
+        create_axis.btns_border_y = create_dims.srv_info_h - 1 - create_dims.btns_border_h - GFX_ELEM_VOFF;
+        create_axis.btns_border_x = (create_dims.srv_info_w - create_dims.btns_border_w)/2;
 
         create_axis.btns_y[0] = 1;
         create_axis.btns_x[0] = 1;
@@ -517,20 +566,68 @@ int _set_axis()
         cfg_axis.vis_pad_ye = cfg_axis.vis_pad_ys + cfg_dims.vis_pad_h - 1;
         cfg_axis.vis_pad_xe = cfg_axis.vis_pad_xs + cfg_dims.vis_pad_w - 1;
 
-        cfg_axis.v_delim_x = LABEL_LEN;
+        cfg_axis.v_delim_x = global_dims.h_spacer*2 + LABEL_LEN;
 
         cfg_axis.entries_y[0] = 0;
-        cfg_axis.entries_x[0] = global_dims.h_spacer;
-        cfg_axis.fields_x[0] = cfg_axis.v_delim_x + 1 + global_dims.h_spacer;
+        cfg_axis.entries_x[0] = 0;
+        cfg_axis.labels_x[0] = global_dims.h_spacer;
+        cfg_axis.fields_x[0] = cfg_axis.v_delim_x + 2 + global_dims.h_spacer;
+
         cfg_axis.entries_y[1] = cfg_axis.entries_y[0] + cfg_dims.entry_h + 1;
-        cfg_axis.entries_x[1] = cfg_axis.entries_x[0];
-        cfg_axis.fields_x[1] = cfg_axis.v_delim_x + 1 + global_dims.h_spacer;
+        cfg_axis.entries_x[1] = 0;
+        cfg_axis.labels_x[1] = global_dims.h_spacer;
+        cfg_axis.fields_x[1] = cfg_axis.v_delim_x + 2 + global_dims.h_spacer;
+
         cfg_axis.entries_y[2] = cfg_axis.entries_y[1] + cfg_dims.entry_h + 1;
-        cfg_axis.entries_x[2] = cfg_axis.entries_x[0];
-        cfg_axis.fields_x[2] = cfg_axis.v_delim_x + 1 + global_dims.h_spacer;
+        cfg_axis.entries_x[2] = 0;
+        cfg_axis.labels_x[2] = global_dims.h_spacer;
+        cfg_axis.fields_x[2] = cfg_axis.v_delim_x + 2 + global_dims.h_spacer;
+
         cfg_axis.entries_y[3] = cfg_axis.entries_y[2] + cfg_dims.entry_h + 1;
-        cfg_axis.entries_x[3] = cfg_axis.entries_x[0];
-        cfg_axis.fields_x[3] = cfg_axis.v_delim_x + 1 + global_dims.h_spacer;
+        cfg_axis.entries_x[3] = 0;
+        cfg_axis.labels_x[3] = global_dims.h_spacer;
+        cfg_axis.fields_x[3] = cfg_axis.v_delim_x + 2 + global_dims.h_spacer;
+    }
+
+    /* Set axis that are used in chat window */
+    {
+        chat_axis.msg_y = 1 + GFX_ELEM_VOFF;
+        chat_axis.msg_x = 1 + GFX_ELEM_HOFF;
+        chat_axis.usrs_y = 1 + GFX_ELEM_VOFF;
+        chat_axis.usrs_x = global_dims.wnd_w - 1 - chat_dims.usrs_w - GFX_ELEM_HOFF;
+        chat_axis.tb_y = global_dims.wnd_h - 1 - chat_dims.tb_h - GFX_ELEM_VOFF;
+        chat_axis.tb_x = 1 + GFX_ELEM_HOFF;
+
+        // cfg_axis.vis_pad_ys = global_axis.wnd_y + cfg_axis.pad_border_y + 1;
+        // cfg_axis.vis_pad_xs = global_axis.wnd_x + cfg_axis.pad_border_x + 1;
+        // cfg_axis.vis_pad_ye = cfg_axis.vis_pad_ys + cfg_dims.vis_pad_h - 1;
+        // cfg_axis.vis_pad_xe = cfg_axis.vis_pad_xs + cfg_dims.vis_pad_w - 1;
+        chat_axis.vis_pad_ys[0] = global_axis.wnd_y + chat_axis.tb_y + 1;
+        chat_axis.vis_pad_xs[0] = global_axis.wnd_x + chat_axis.tb_x + 1;
+        chat_axis.vis_pad_ye[0] = chat_axis.vis_pad_ys[0] + chat_dims.vis_pad_h[0] - 1;
+        chat_axis.vis_pad_xe[0] = chat_axis.vis_pad_xs[0] + chat_dims.vis_pad_w[0] - 1;
+        // chat_axis.pad_ys[0];
+        // chat_axis.pad_xs[0];
+        // chat_axis.pad_ye[0];
+        // chat_axis.pad_xe[0];
+
+        chat_axis.vis_pad_ys[1] = global_axis.wnd_y + chat_axis.msg_y + 1;
+        chat_axis.vis_pad_xs[1] = global_axis.wnd_x + chat_axis.msg_x + 1;
+        chat_axis.vis_pad_ye[1] = chat_axis.vis_pad_ys[1] + chat_dims.vis_pad_h[1] - 1;
+        chat_axis.vis_pad_xe[1] = chat_axis.vis_pad_xs[1] + chat_dims.vis_pad_w[1] - 1;
+        // chat_axis.pad_ys[1];
+        // chat_axis.pad_xs[1];
+        // chat_axis.pad_ye[1];
+        // chat_axis.pad_xe[1];
+
+        chat_axis.vis_pad_ys[2] = global_axis.wnd_y + chat_axis.usrs_y + 1;
+        chat_axis.vis_pad_xs[2] = global_axis.wnd_x + chat_axis.usrs_x + 1;
+        chat_axis.vis_pad_ye[2] = chat_axis.vis_pad_ys[2] + chat_dims.vis_pad_h[2] - 1;
+        chat_axis.vis_pad_xe[2] = chat_axis.vis_pad_xs[2] + chat_dims.vis_pad_w[2] - 1;
+        // chat_axis.pad_ys[2];
+        // chat_axis.pad_xs[2];
+        // chat_axis.pad_ye[2];
+        // chat_axis.pad_xe[2];
     }
 
     return ret;
@@ -540,12 +637,7 @@ int init_graphics()
 {
     int ret = EXIT_SUCCESS;
 
-    ret += _set_label(&note_labels.mmenu_connected, MENU_SCR_NOTE_CONNECTED);
-    ret += _set_label(&note_labels.mmenu_disconnected, MENU_SCR_NOTE_DISCONNECTED);
-    ret += _set_label(&note_labels.mmenu_connecting, MENU_SCR_NOTE_CONNECTING);
-    ret += _set_label(&note_labels.join_srv, JOIN_SCR_NOTE);
-    ret += _set_label(&note_labels.create_srv, CREATE_SCR_NOTE);
-    ret += _set_label(&note_labels.prefs_wnd, PREFS_SCR_NOTE);
+    ret += _set_labels();
 
     ret += _set_dimensions();
 
@@ -576,97 +668,35 @@ int init_graphics()
 
 void deinit_graphics()
 {
-    endwin();
+    _delete_window();
+    _free_memory(WND_NONE);
+    cur_wnd = WND_NONE;
 
-    if (note_labels.mmenu_connected.text != NULL)
-    {
-        free(note_labels.mmenu_connected.text);
-    }
-    if (note_labels.mmenu_disconnected.text != NULL)
-    {
-        free(note_labels.mmenu_disconnected.text);
-    }
-    if (note_labels.mmenu_connecting.text != NULL)
-    {
-        free(note_labels.mmenu_connecting.text);
-    }
-    if (note_labels.join_srv.text != NULL)
-    {
-        free(note_labels.join_srv.text);
-    }
-    if (note_labels.create_srv.text != NULL)
-    {
-        free(note_labels.create_srv.text);
-    }
-    if (note_labels.prefs_wnd.text != NULL)
-    {
-        free(note_labels.prefs_wnd.text);
-    }
-    
+    endwin();
 }
 
 int _draw_window(int wnd_type)
 {
     int index;
-    int tmp = 0;
+    int tmp_int = 0;
+    char tmp_str[STR_LEN+1];
     int ret = EXIT_SUCCESS;
+
+    if (wnd_type == cur_wnd)
+        _delete_window();
+    else if (cur_wnd != WND_NONE)
+        return EXIT_FAILURE;
 
     switch(wnd_type)
     {
-        case WND_NONE:
-            ret = EXIT_FAILURE;
-            break;
         case WND_MAIN_MENU:
             {
-                if (wnd_type == cur_wnd)
+                if (cur_wnd == WND_NONE)
                 {
-                    wclear(stdscr);
-                    refresh();
-
-                    delwin(global_wnds.note_sw);
-                    delwin(global_wnds.note_w);
-                    delwin(main_menu.panel_sw);
-                    delwin(main_menu.panel_w);
-                    for (index = 0; index < 4; ++index)
-                    {
-                        delwin(main_menu.btns[index].wnd);
-                    }
-                    delwin(main_menu.btns_border);
-                    delwin(main_menu.status_sw);
-                    delwin(main_menu.status_w);
-                    delwin(main_menu.header_w);
-                    delwin(global_wnds.wnd);
-
-                    global_wnds.wnd = NULL;
-                    main_menu.header_w = NULL;
-                    main_menu.status_w = NULL;
-                    main_menu.status_sw = NULL;
-                    main_menu.btns_border = NULL;
-                    for (index = 0; index < 4; ++index)
-                    {
-                        main_menu.btns[index].wnd = NULL;
-                    }
-                    main_menu.panel_w = NULL;
-                    main_menu.panel_sw = NULL;
-                    global_wnds.note_w = NULL;
-                    global_wnds.note_sw = NULL;
-                }
-                else
-                {
-                    main_menu.btns[0].lbl.size = strlen(MENU_SCR_CLT_BTN_LABEL)+1;
-                    main_menu.btns[1].lbl.size = strlen(MENU_SCR_SRV_BTN_LABEL)+1;
-                    main_menu.btns[2].lbl.size = strlen(MENU_SCR_CFG_BTN_LABEL)+1;
-                    main_menu.btns[3].lbl.size = strlen(MENU_SCR_QUIT_BTN_LABEL)+1;
-
-                    for (index = 0; index < sizeof(main_menu.btns)/sizeof(struct elem_wnd_t); ++index)
-                    {
-                        main_menu.btns[index].lbl.text = malloc(main_menu.btns[index].lbl.size);
-                    }
-
-                    strcpy(main_menu.btns[0].lbl.text, MENU_SCR_CLT_BTN_LABEL);
-                    strcpy(main_menu.btns[1].lbl.text, MENU_SCR_SRV_BTN_LABEL);
-                    strcpy(main_menu.btns[2].lbl.text, MENU_SCR_CFG_BTN_LABEL);
-                    strcpy(main_menu.btns[3].lbl.text, MENU_SCR_QUIT_BTN_LABEL);
+                    _set_string(&main_menu.btns[0].lbl, MENU_SCR_CLT_BTN_LABEL);
+                    _set_string(&main_menu.btns[1].lbl, MENU_SCR_SRV_BTN_LABEL);
+                    _set_string(&main_menu.btns[2].lbl, MENU_SCR_CFG_BTN_LABEL);
+                    _set_string(&main_menu.btns[3].lbl, MENU_SCR_QUIT_BTN_LABEL);
                 }
 
                 global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
@@ -846,61 +876,11 @@ int _draw_window(int wnd_type)
             break;
         case WND_JOIN_SRV:
             {
-                if (wnd_type == cur_wnd)
+                if (cur_wnd == WND_NONE)
                 {
-                    wclear(stdscr);
-                    refresh();
-
-                    delwin(global_wnds.note_sw);
-                    delwin(global_wnds.note_w);
-                    for (index = 0; index < 3; ++index)
-                    {
-                        delwin(join_srv.btns[index].wnd);
-                    }
-                    delwin(join_srv.btns_border);
-                    delwin(join_srv.tb_w);
-                    delwin(join_srv.label_w);
-                    delwin(join_srv.caddr_w);
-                    delwin(join_srv.servers_pad);
-                    delwin(join_srv.pad_border);
-                    delwin(join_srv.susers_w);
-                    delwin(join_srv.saddr_w);
-                    delwin(join_srv.sname_w);
-                    delwin(join_srv.top_panel);
-                    delwin(global_wnds.wnd);
-
-                    global_wnds.wnd = NULL;
-                    join_srv.top_panel = NULL;
-                    join_srv.sname_w = NULL;
-                    join_srv.saddr_w = NULL;
-                    join_srv.susers_w = NULL;
-                    join_srv.pad_border = NULL;
-                    join_srv.servers_pad = NULL;
-                    join_srv.caddr_w = NULL;
-                    join_srv.label_w = NULL;
-                    join_srv.tb_w = NULL;
-                    join_srv.btns_border = NULL;
-                    for (index = 0; index < 4; ++index)
-                    {
-                        join_srv.btns[index].wnd = NULL;
-                    }
-                    global_wnds.note_w = NULL;
-                    global_wnds.note_sw = NULL;
-                }
-                else
-                {
-                    join_srv.btns[0].lbl.size = strlen(JOIN_SCR_JOIN_BTN_LABEL)+1;
-                    join_srv.btns[1].lbl.size = strlen(JOIN_SCR_REFRESH_BTN_LABEL)+1;
-                    join_srv.btns[2].lbl.size = strlen(JOIN_SCR_CLEAR_BTN_LABEL)+1;
-
-                    for (index = 0; index < sizeof(join_srv.btns)/sizeof(struct elem_wnd_t); ++index)
-                    {
-                        join_srv.btns[index].lbl.text = malloc(join_srv.btns[index].lbl.size);
-                    }
-
-                    strcpy(join_srv.btns[0].lbl.text, JOIN_SCR_JOIN_BTN_LABEL);
-                    strcpy(join_srv.btns[1].lbl.text, JOIN_SCR_REFRESH_BTN_LABEL);
-                    strcpy(join_srv.btns[2].lbl.text, JOIN_SCR_CLEAR_BTN_LABEL);
+                    _set_string(&join_srv.btns[0].lbl, JOIN_SCR_JOIN_BTN_LABEL);
+                    _set_string(&join_srv.btns[1].lbl, JOIN_SCR_REFRESH_BTN_LABEL);
+                    _set_string(&join_srv.btns[2].lbl, JOIN_SCR_CLEAR_BTN_LABEL);
                 }
 
                 global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
@@ -993,27 +973,27 @@ int _draw_window(int wnd_type)
                 mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
                 wattroff(join_srv.servers_pad, COLOR_PAIR(2));
 
-                tmp = join_axis.pad_border_x+join_axis.saddr_x-1;
-                if (tmp == join_axis.caddr_x+join_dims.caddr_w-1)
+                tmp_int = join_axis.pad_border_x+join_axis.saddr_x-1;
+                if (tmp_int == join_axis.caddr_x+join_dims.caddr_w-1)
                 {
                     mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                 }
                 else
                 {
                     
-                    if (tmp == join_axis.btns_border_x)
+                    if (tmp_int == join_axis.btns_border_x)
                     {
                         mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                     }
                     else
                     {
-                        if (tmp == join_axis.btns_border_x + join_axis.btns_x[1]-1)
+                        if (tmp_int == join_axis.btns_border_x + join_axis.btns_x[1]-1)
                         {
                             mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                         }
                         else
                         {
-                            if (tmp == join_axis.btns_border_x + join_axis.btns_x[2]-1)
+                            if (tmp_int == join_axis.btns_border_x + join_axis.btns_x[2]-1)
                             {
                                 mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
                             }
@@ -1025,7 +1005,7 @@ int _draw_window(int wnd_type)
                     }
                 }
 
-                tmp = (join_axis.pad_border_x+join_axis.susers_x-1);
+                tmp_int = (join_axis.pad_border_x+join_axis.susers_x-1);
                 if ((join_axis.pad_border_x+join_axis.susers_x-1) == join_axis.btns_border_x)
                 {
                     mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.susers_x-1, ACS_PLUS);
@@ -1052,62 +1032,18 @@ int _draw_window(int wnd_type)
             break;
         case WND_CREATE_SRV:
             {
-                if (wnd_type == cur_wnd)
+                if (cur_wnd == WND_NONE)
                 {
-                    wclear(stdscr);
-                    refresh();
+                    for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
+                        memset((char *)&create_srv.entries[index], NULL, sizeof(struct entry_t));
 
-                    delwin(global_wnds.note_sw);
-                    delwin(global_wnds.note_w);
-
-                    for (index = 0; index < 7; ++index)
-                    {
-                        delwin(create_srv.entries[index].elem.wnd);
-                        create_srv.entries[index].elem.wnd = NULL;
-                    }
-                    delwin(create_srv.srv_info_sw);
-                    for (index = 0; index < 3; ++index)
-                    {
-                        delwin(create_srv.btns[index].wnd);
-                        create_srv.btns[index].wnd = NULL;
-                    }
-                    delwin(create_srv.pad);
-
-                    delwin(create_srv.srv_info_w);
-                    delwin(create_srv.pad_border);
-                    delwin(global_wnds.wnd);
-
-                    global_wnds.wnd = NULL;
-
-                    create_srv.pad_border = NULL;
-                    create_srv.srv_info_w = NULL;
-                    create_srv.pad = NULL;
-
-                    global_wnds.note_w = NULL;
-                    global_wnds.note_sw = NULL;
-                }
-                else
-                {
-                    create_srv.entries[0].elem.lbl.size = strlen(CREATE_SCR_SRV_NAME_LABEL)+1;
-                    create_srv.entries[1].elem.lbl.size = strlen(CREATE_SCR_CONN_USERS_LABEL)+1;
-                    create_srv.entries[2].elem.lbl.size = strlen(CREATE_SCR_RESTR_USERS_LABEL)+1;
-                    create_srv.entries[3].elem.lbl.size = strlen(CREATE_SCR_SRV_ADDR_LABEL)+1;
-                    create_srv.entries[4].elem.lbl.size = strlen(CREATE_SCR_SRV_PORT_LABEL)+1;
-                    create_srv.entries[5].elem.lbl.size = strlen(CREATE_SCR_LCL_ADDR_LABEL)+1;
-                    create_srv.entries[6].elem.lbl.size = strlen(CREATE_SCR_AUTO_PORT_LABEL)+1;
-
-                    for (index = 0; index < 7; ++index)
-                    {
-                        create_srv.entries[index].elem.lbl.text = malloc(create_srv.entries[index].elem.lbl.size);
-                    }
-
-                    strcpy(create_srv.entries[0].elem.lbl.text, CREATE_SCR_SRV_NAME_LABEL);
-                    strcpy(create_srv.entries[1].elem.lbl.text, CREATE_SCR_CONN_USERS_LABEL);
-                    strcpy(create_srv.entries[2].elem.lbl.text, CREATE_SCR_RESTR_USERS_LABEL);
-                    strcpy(create_srv.entries[3].elem.lbl.text, CREATE_SCR_SRV_ADDR_LABEL);
-                    strcpy(create_srv.entries[4].elem.lbl.text, CREATE_SCR_SRV_PORT_LABEL);
-                    strcpy(create_srv.entries[5].elem.lbl.text, CREATE_SCR_LCL_ADDR_LABEL);
-                    strcpy(create_srv.entries[6].elem.lbl.text, CREATE_SCR_AUTO_PORT_LABEL);
+                    _set_string(&create_srv.entries[0].elem.lbl, CREATE_SCR_SRV_NAME_LABEL);
+                    _set_string(&create_srv.entries[1].elem.lbl, CREATE_SCR_CONN_USERS_LABEL);
+                    _set_string(&create_srv.entries[2].elem.lbl, CREATE_SCR_RESTR_USERS_LABEL);
+                    _set_string(&create_srv.entries[3].elem.lbl, CREATE_SCR_SRV_ADDR_LABEL);
+                    _set_string(&create_srv.entries[4].elem.lbl, CREATE_SCR_SRV_PORT_LABEL);
+                    _set_string(&create_srv.entries[5].elem.lbl, CREATE_SCR_LCL_ADDR_LABEL);
+                    _set_string(&create_srv.entries[6].elem.lbl, CREATE_SCR_AUTO_PORT_LABEL);
 
                     create_srv.entries[0].type = ENTRY_TYPE_STRING;
                     create_srv.entries[1].type = ENTRY_TYPE_SHORT;
@@ -1116,6 +1052,11 @@ int _draw_window(int wnd_type)
                     create_srv.entries[4].type = ENTRY_TYPE_SHORT;
                     create_srv.entries[5].type = ENTRY_TYPE_OPTION;
                     create_srv.entries[6].type = ENTRY_TYPE_OPTION;
+
+                    strncpy(create_srv.server.server_name, CREATE_DEF_SRV_NAME, STR_LEN);
+                    create_srv.server.max_users = CREATE_DEF_USR_RESTR;
+                    strncpy(create_srv.server.ip, CREATE_DEF_SRV_IP, IP_ADDR_LEN);
+                    create_srv.server.port = CREATE_DEF_SRV_PORT;
 
                     create_srv.entries[0].value_ptr = (void *)&create_srv.server.server_name;
                     create_srv.entries[1].value_ptr = (void *)&create_srv.server.max_users;
@@ -1133,10 +1074,27 @@ int _draw_window(int wnd_type)
                     create_srv.entries[5].ptr_size = sizeof(create_srv.local_srv_flag);
                     create_srv.entries[6].ptr_size = sizeof(create_srv.auto_port_flag);
 
-                    strncpy(create_srv.entries[0].value_str.text, CREATE_DEF_SRV_NAME, LABEL_LEN);
-                    snprintf(create_srv.entries[1].value_str.text, LABEL_LEN, "%d", CREATE_DEF_USR_RESTR);
-                    strncpy(create_srv.entries[3].value_str.text, CREATE_DEF_SRV_IP, LABEL_LEN);
-                    snprintf(create_srv.entries[4].value_str.text, LABEL_LEN, "%d", CREATE_DEF_SRV_PORT);
+                    snprintf(tmp_str, STR_LEN, "%d", 0xFFFF);
+
+                    create_srv.entries[0].value_str.max_len = create_srv.entries[0].ptr_size;
+                    create_srv.entries[1].value_str.max_len =  strlen(tmp_str);
+                    create_srv.entries[3].value_str.max_len = create_srv.entries[3].ptr_size;
+                    create_srv.entries[4].value_str.max_len =  strlen(tmp_str);
+
+                    strncpy(create_srv.entries[0].value_str.text, create_srv.server.server_name, LABEL_LEN);
+                    snprintf(create_srv.entries[1].value_str.text, LABEL_LEN, "%d", create_srv.server.max_users);
+                    strncpy(create_srv.entries[3].value_str.text, create_srv.server.ip, LABEL_LEN);
+                    snprintf(create_srv.entries[4].value_str.text, LABEL_LEN, "%d", create_srv.server.port);
+
+                    create_srv.entries[0].value_str.str_len = strlen(create_srv.entries[0].value_str.text);
+                    create_srv.entries[1].value_str.str_len = strlen(create_srv.entries[1].value_str.text);
+                    create_srv.entries[3].value_str.str_len = strlen(create_srv.entries[3].value_str.text);
+                    create_srv.entries[4].value_str.str_len = strlen(create_srv.entries[4].value_str.text);
+
+                    create_srv.entries[0].selection = create_srv.entries[0].value_str.str_len < create_srv.entries[0].value_str.max_len ? create_srv.entries[0].value_str.str_len : create_srv.entries[0].value_str.max_len-1;
+                    create_srv.entries[1].selection = create_srv.entries[1].value_str.str_len < create_srv.entries[1].value_str.max_len ? create_srv.entries[1].value_str.str_len : create_srv.entries[1].value_str.max_len-1;
+                    create_srv.entries[3].selection = create_srv.entries[3].value_str.str_len < create_srv.entries[3].value_str.max_len ? create_srv.entries[3].value_str.str_len : create_srv.entries[3].value_str.max_len-1;
+                    create_srv.entries[4].selection = create_srv.entries[4].value_str.str_len < create_srv.entries[4].value_str.max_len ? create_srv.entries[4].value_str.str_len : create_srv.entries[4].value_str.max_len-1;
 
                     create_srv.entries[2].value_list.size = 2;
                     create_srv.entries[2].value_list.options = malloc(create_srv.entries[2].value_list.size*sizeof(struct option_t));
@@ -1145,11 +1103,15 @@ int _draw_window(int wnd_type)
                         strcpy(create_srv.entries[2].value_list.options[0].option, OPTIONS_FALSE_LABEL);
                         strcpy(create_srv.entries[2].value_list.options[1].option, OPTIONS_TRUE_LABEL);
 
-                        for(index = 0; index < create_srv.entries[2].value_list.size; ++index)
-                            create_srv.entries[2].value_list.options[index].str_len = strlen(create_srv.entries[2].value_list.options[index].option);
-
                         create_srv.entries[2].value_list.options[0].value = false;
                         create_srv.entries[2].value_list.options[1].value = true;
+
+                        for(index = 0; index < create_srv.entries[2].value_list.size; ++index)
+                        {
+                            create_srv.entries[2].value_list.options[index].str_len = strlen(create_srv.entries[2].value_list.options[index].option);
+                            if (create_srv.usr_restrict_flag == create_srv.entries[2].value_list.options[index].value)
+                                create_srv.entries[2].selection = index;
+                        }
                     }
 
                     create_srv.entries[5].value_list.size = 2;
@@ -1159,11 +1121,15 @@ int _draw_window(int wnd_type)
                         strcpy(create_srv.entries[5].value_list.options[0].option, OPTIONS_FALSE_LABEL);
                         strcpy(create_srv.entries[5].value_list.options[1].option, OPTIONS_TRUE_LABEL);
 
-                        for(index = 0; index < create_srv.entries[5].value_list.size; ++index)
-                            create_srv.entries[5].value_list.options[index].str_len = strlen(create_srv.entries[5].value_list.options[index].option);
-
                         create_srv.entries[5].value_list.options[0].value = false;
                         create_srv.entries[5].value_list.options[1].value = true;
+
+                        for(index = 0; index < create_srv.entries[5].value_list.size; ++index)
+                        {
+                            create_srv.entries[5].value_list.options[index].str_len = strlen(create_srv.entries[5].value_list.options[index].option);
+                            if (create_srv.usr_restrict_flag == create_srv.entries[5].value_list.options[index].value)
+                                create_srv.entries[5].selection = index;
+                        }
                     }
 
                     create_srv.entries[6].value_list.size = 2;
@@ -1173,38 +1139,20 @@ int _draw_window(int wnd_type)
                         strcpy(create_srv.entries[6].value_list.options[0].option, OPTIONS_FALSE_LABEL);
                         strcpy(create_srv.entries[6].value_list.options[1].option, OPTIONS_TRUE_LABEL);
 
-                        for(index = 0; index < create_srv.entries[6].value_list.size; ++index)
-                            create_srv.entries[6].value_list.options[index].str_len = strlen(create_srv.entries[6].value_list.options[index].option);
-
                         create_srv.entries[6].value_list.options[0].value = false;
                         create_srv.entries[6].value_list.options[1].value = true;
+
+                        for(index = 0; index < create_srv.entries[6].value_list.size; ++index)
+                        {
+                            create_srv.entries[6].value_list.options[index].str_len = strlen(create_srv.entries[6].value_list.options[index].option);
+                            if (create_srv.usr_restrict_flag == create_srv.entries[6].value_list.options[index].value)
+                                create_srv.entries[6].selection = index;
+                        }
                     }
 
-                    create_srv.entries[0].value_str.str_len = strlen(create_srv.entries[0].value_str.text);
-                    create_srv.entries[1].value_str.str_len = strlen(create_srv.entries[1].value_str.text);
-                    create_srv.entries[3].value_str.str_len = strlen(create_srv.entries[3].value_str.text);
-                    create_srv.entries[4].value_str.str_len = strlen(create_srv.entries[4].value_str.text);
-
-                    create_srv.entries[0].selection = create_srv.entries[0].value_str.str_len;
-                    create_srv.entries[1].selection = create_srv.entries[1].value_str.str_len;
-                    create_srv.entries[2].selection = 0;
-                    create_srv.entries[3].selection = create_srv.entries[3].value_str.str_len;
-                    create_srv.entries[4].selection = create_srv.entries[4].value_str.str_len;
-                    create_srv.entries[5].selection = 0;
-                    create_srv.entries[6].selection = 0;
-
-                    create_srv.btns[0].lbl.size = strlen(CREATE_SCR_CREATE_BTN_LABEL)+1;
-                    create_srv.btns[1].lbl.size = strlen(CREATE_SCR_DEFAULT_BTN_LABEL)+1;
-                    create_srv.btns[2].lbl.size = strlen(CREATE_SCR_CLEAR_BTN_LABEL)+1;
-
-                    for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
-                    {
-                        create_srv.btns[index].lbl.text = malloc(create_srv.btns[index].lbl.size);
-                    }
-
-                    strcpy(create_srv.btns[0].lbl.text, CREATE_SCR_CREATE_BTN_LABEL);
-                    strcpy(create_srv.btns[1].lbl.text, CREATE_SCR_DEFAULT_BTN_LABEL);
-                    strcpy(create_srv.btns[2].lbl.text, CREATE_SCR_CLEAR_BTN_LABEL);
+                    _set_string(&create_srv.btns[0].lbl, CREATE_SCR_CREATE_BTN_LABEL);
+                    _set_string(&create_srv.btns[1].lbl, CREATE_SCR_DEFAULT_BTN_LABEL);
+                    _set_string(&create_srv.btns[2].lbl, CREATE_SCR_CLEAR_BTN_LABEL);
                 }
 
                 global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
@@ -1235,7 +1183,7 @@ int _draw_window(int wnd_type)
 
                 mvwprintw(global_wnds.wnd, 0, ((global_dims.wnd_w-strlen(CREATE_SCR_LABEL))/2), CREATE_SCR_LABEL);
 
-                wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, "Default name", "Not restricted", "127.0.0.1:27015");
+                wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, create_srv.entries[1].value_str.text, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
 
                 for (index = 0; index < 7; ++index)
                 {
@@ -1283,18 +1231,27 @@ int _draw_window(int wnd_type)
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
                         case ENTRY_TYPE_IP:
-                            move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                        {
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.is_set = true;
+
+                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                            move(cursor.y, cursor.x);
                             curs_set(1);
+                        }
                             break;
                         case ENTRY_TYPE_OPTION:
+                        {
+                            cursor.is_set = false;
                             curs_set(0);
-                                wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                                mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                                wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
 
-                                wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                                mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                                wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                        }
+                            
                             break;
                         default:
                             break;
@@ -1339,176 +1296,208 @@ int _draw_window(int wnd_type)
             }
             break;
         case WND_PREFS:
+        {
+            if (cur_wnd == WND_NONE)
             {
-                if (wnd_type == cur_wnd)
+                _set_string(&cfg_wnds.entries[0].elem.lbl, PREFS_USERNAME_LABEL);
+                _set_string(&cfg_wnds.entries[1].elem.lbl, PREFS_LANG_LABEL);
+                _set_string(&cfg_wnds.entries[2].elem.lbl, PREFS_IP_LABEL);
+                _set_string(&cfg_wnds.entries[3].elem.lbl, PREFS_PORT_LABEL);
+
+                cfg_wnds.entries[0].type = ENTRY_TYPE_STRING;
+                cfg_wnds.entries[1].type = ENTRY_TYPE_OPTION;
+                cfg_wnds.entries[2].type = ENTRY_TYPE_IP;
+                cfg_wnds.entries[3].type = ENTRY_TYPE_SHORT;
+
+                cfg_wnds.entries[0].value_ptr = (void *)&config.name;
+                cfg_wnds.entries[1].value_ptr = (void *)&config.language;
+                cfg_wnds.entries[2].value_ptr = (void *)&config.ip;
+                cfg_wnds.entries[3].value_ptr = (void *)&config.port;
+
+                cfg_wnds.entries[0].ptr_size = sizeof(config.name)-1;
+                cfg_wnds.entries[1].ptr_size = sizeof(config.language);
+                cfg_wnds.entries[2].ptr_size = sizeof(config.ip)-1;
+                cfg_wnds.entries[3].ptr_size = sizeof(config.port);
+
+                cfg_wnds.entries[1].value_list.size = 2;
+                cfg_wnds.entries[1].value_list.options = malloc(cfg_wnds.entries[1].value_list.size*sizeof(struct option_t));
+                if (cfg_wnds.entries[1].value_list.options != NULL)
                 {
-                    wclear(stdscr);
-                    refresh();
+                    strcpy(cfg_wnds.entries[1].value_list.options[0].option, PREFS_LANG_EN_LABEL);
+                    strcpy(cfg_wnds.entries[1].value_list.options[1].option, PREFS_LANG_RU_LABEL);
 
-                    delwin(global_wnds.note_sw);
-                    delwin(global_wnds.note_w);
+                    cfg_wnds.entries[1].value_list.options[0].value = LANG_EN;
+                    cfg_wnds.entries[1].value_list.options[1].value = LANG_RU;
 
-                    delwin(cfg_wnd.pad);
-                    delwin(cfg_wnd.pad_border);
-                    
-                    delwin(global_wnds.wnd);
-
-                    global_wnds.wnd = NULL;
-
-                    cfg_wnd.pad_border = NULL;
-                    cfg_wnd.pad = NULL;
-
-                    global_wnds.note_w = NULL;
-                    global_wnds.note_sw = NULL;
-                }
-                else
-                {
-                    cfg_wnd.entries[0].elem.lbl.size = strlen(PREFS_USERNAME_LABEL)+1;
-                    cfg_wnd.entries[1].elem.lbl.size = strlen(PREFS_LANG_LABEL)+1;
-                    cfg_wnd.entries[2].elem.lbl.size = strlen(PREFS_IP_LABEL)+1;
-                    cfg_wnd.entries[3].elem.lbl.size = strlen(PREFS_PORT_LABEL)+1;
-
-                    for (index = 0; index < sizeof(cfg_wnd.entries)/sizeof(struct entry_t); ++index)
+                    for (index = 0; index < cfg_wnds.entries[1].value_list.size; ++index)
                     {
-                        cfg_wnd.entries[index].elem.lbl.text = malloc(cfg_wnd.entries[index].elem.lbl.size);
-                    }
-
-                    strcpy(cfg_wnd.entries[0].elem.lbl.text, PREFS_USERNAME_LABEL);
-                    strcpy(cfg_wnd.entries[1].elem.lbl.text, PREFS_LANG_LABEL);
-                    strcpy(cfg_wnd.entries[2].elem.lbl.text, PREFS_IP_LABEL);
-                    strcpy(cfg_wnd.entries[3].elem.lbl.text, PREFS_PORT_LABEL);
-
-                    cfg_wnd.entries[0].type = ENTRY_TYPE_STRING;
-                    cfg_wnd.entries[1].type = ENTRY_TYPE_OPTION;
-                    cfg_wnd.entries[2].type = ENTRY_TYPE_STRING;
-                    cfg_wnd.entries[3].type = ENTRY_TYPE_INT;
-
-                    cfg_wnd.entries[0].value_ptr = (void *)&config.name;
-                    cfg_wnd.entries[1].value_ptr = (void *)&config.language;
-                    cfg_wnd.entries[2].value_ptr = (void *)&config.ip;
-                    cfg_wnd.entries[3].value_ptr = (void *)&config.port;
-
-                    cfg_wnd.entries[0].ptr_size = sizeof(config.name);
-                    cfg_wnd.entries[1].ptr_size = sizeof(config.language);
-                    cfg_wnd.entries[2].ptr_size = sizeof(config.ip);
-                    cfg_wnd.entries[3].ptr_size = sizeof(config.port);
-
-                    cfg_wnd.entries[1].value_list.size = 2;
-                    cfg_wnd.entries[1].value_list.options = malloc(cfg_wnd.entries[1].value_list.size*sizeof(struct option_t));
-                    if (cfg_wnd.entries[1].value_list.options != NULL)
-                    {
-                        strcpy(cfg_wnd.entries[1].value_list.options[0].option, PREFS_LANG_EN_LABEL);
-                        strcpy(cfg_wnd.entries[1].value_list.options[1].option, PREFS_LANG_RU_LABEL);
-
-                        cfg_wnd.entries[1].value_list.options[0].value = LANG_EN;
-                        cfg_wnd.entries[1].value_list.options[1].value = LANG_RU;
-
-                        for (index = 0; index < cfg_wnd.entries[1].value_list.size; ++index)
+                        cfg_wnds.entries[1].value_list.options[index].str_len = strlen(cfg_wnds.entries[1].value_list.options[index].option);
+                        if (config.language == cfg_wnds.entries[1].value_list.options[index].value)
                         {
-                            cfg_wnd.entries[1].value_list.options[index].str_len = strlen(cfg_wnd.entries[1].value_list.options[index].option);
-                            if (config.language == cfg_wnd.entries[1].value_list.options[index].value)
-                            {
-                                cfg_wnd.entries[1].selection = index;
-                            }
+                            cfg_wnds.entries[1].selection = index;
                         }
                     }
-
-                    strncpy(cfg_wnd.entries[0].value_str.text, config.name, LABEL_LEN);
-                    strncpy(cfg_wnd.entries[2].value_str.text, config.ip, LABEL_LEN);
-                    snprintf(cfg_wnd.entries[3].value_str.text, LABEL_LEN, "%d", config.port);
-
-                    cfg_wnd.entries[0].value_str.str_len = strlen(cfg_wnd.entries[0].value_str.text);
-                    cfg_wnd.entries[2].value_str.str_len = strlen(cfg_wnd.entries[2].value_str.text);
-                    cfg_wnd.entries[3].value_str.str_len = strlen(cfg_wnd.entries[3].value_str.text);
-
-                    cfg_wnd.entries[0].selection = cfg_wnd.entries[0].value_str.str_len;
-                    cfg_wnd.entries[2].selection = cfg_wnd.entries[2].value_str.str_len;
-                    cfg_wnd.entries[3].selection = cfg_wnd.entries[3].value_str.str_len;
                 }
 
-                global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
+                strncpy(cfg_wnds.entries[0].value_str.text, config.name, LABEL_LEN);
+                strncpy(cfg_wnds.entries[2].value_str.text, config.ip, LABEL_LEN);
+                snprintf(cfg_wnds.entries[3].value_str.text, LABEL_LEN, "%d", config.port);
 
-                cfg_wnd.pad_border = derwin(global_wnds.wnd, cfg_dims.pad_border_h, cfg_dims.pad_border_w, cfg_axis.pad_border_y, cfg_axis.pad_border_x);
+                cfg_wnds.entries[0].value_str.str_len = strlen(cfg_wnds.entries[0].value_str.text);
+                cfg_wnds.entries[2].value_str.str_len = strlen(cfg_wnds.entries[2].value_str.text);
+                cfg_wnds.entries[3].value_str.str_len = strlen(cfg_wnds.entries[3].value_str.text);
 
-                cfg_wnd.pad = newpad(cfg_dims.pad_h, cfg_dims.pad_w);
-
-                for (index = 0; index < 4; ++index)
-                    cfg_wnd.entries[index].elem.wnd = subpad(cfg_wnd.pad, cfg_dims.entry_h, cfg_dims.entry_w, cfg_axis.entries_y[index], cfg_axis.entries_x[index]);
-
-                global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
-                global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
-
-                box(global_wnds.wnd, ACS_VLINE, ACS_HLINE);
-                box(cfg_wnd.pad_border, ACS_VLINE, ACS_HLINE);
-                box(global_wnds.note_w, ' ', ' ');
-
-                mvwaddch(cfg_wnd.pad_border, 0, cfg_dims.entry_hspacer+cfg_axis.v_delim_x+1, ACS_BSSS);
-                for(index = cfg_axis.entries_y[1]-1; index < cfg_dims.pad_h; index+=1+cfg_dims.entry_h)
-                {
-                    if (index < cfg_dims.pad_border_h-1)
-                    {
-                        mvwaddch(cfg_wnd.pad_border, index+cfg_dims.entry_h, 0, ACS_LTEE);
-                        mvwaddch(cfg_wnd.pad_border, index+cfg_dims.entry_h, cfg_dims.pad_border_w-1, ACS_RTEE);
-                    }
-                    mvwhline(cfg_wnd.pad, index, 0, ACS_HLINE, create_dims.pad_w);
-                    if (index == cfg_dims.pad_h-1)
-                        mvwaddch(cfg_wnd.pad, index, cfg_dims.entry_hspacer+cfg_axis.v_delim_x, ACS_BTEE);
-                    else
-                        mvwaddch(cfg_wnd.pad, index, cfg_dims.entry_hspacer+cfg_axis.v_delim_x, ACS_PLUS);
-                    
-                }
-
-                mvwprintw(global_wnds.wnd, 0, ((global_dims.wnd_w-strlen(PREFS_SCR_LABEL))/2), PREFS_SCR_LABEL);
-
-                wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                for (index = 0; index < 4; ++index)
-                {
-                    mvwprintw(cfg_wnd.entries[index].elem.wnd, 0, 0, cfg_wnd.entries[index].elem.lbl.text);
-                }
-                wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_UNDERLINE | A_BOLD);
-
-                for (index = 0; index < 4; ++index)
-                {
-                    mvwaddch(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.v_delim_x, ACS_VLINE);
-                    switch (cfg_wnd.entries[index].type)
-                    {
-                    case ENTRY_TYPE_STRING:
-                    case ENTRY_TYPE_INT:
-                    case ENTRY_TYPE_FLOAT:
-                        mvwprintw(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index], cfg_wnd.entries[index].value_str.text);
-                        if (index == cfg_wnd.line)
-                        {
-                            move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnd.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnd.line]+cfg_axis.fields_x[cfg_wnd.line]+cfg_wnd.entries[cfg_wnd.line].selection);
-                            curs_set(1);
-                        }
-                        break;
-                    case ENTRY_TYPE_OPTION:
-                        if (index == cfg_wnd.line)
-                        {
-                            curs_set(0);
-                            wattron(cfg_wnd.entries[index].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
-                            wattroff(cfg_wnd.entries[index].elem.wnd, A_BOLD);
-
-                            mvwprintw(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnd.entries[index].value_list.options[cfg_wnd.entries[index].selection].str_len)/2), "%s", cfg_wnd.entries[index].value_list.options[cfg_wnd.entries[index].selection].option);
-
-                            wattron(cfg_wnd.entries[index].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
-                            wattroff(cfg_wnd.entries[index].elem.wnd, A_BOLD);
-                        }
-                        else
-                            mvwaddch(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
-                            mvwprintw(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnd.entries[index].value_list.options[cfg_wnd.entries[index].selection].str_len)/2), "%s", cfg_wnd.entries[index].value_list.options[cfg_wnd.entries[index].selection].option);
-                            mvwaddch(cfg_wnd.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
-                        break;
-                    default:
-                        break;
-                    }
-                }
-
-                mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.prefs_wnd.size)/2), note_labels.prefs_wnd.text);
+                cfg_wnds.entries[0].selection = cfg_wnds.entries[0].value_str.str_len;
+                cfg_wnds.entries[2].selection = cfg_wnds.entries[2].value_str.str_len;
+                cfg_wnds.entries[3].selection = cfg_wnds.entries[3].value_str.str_len;
             }
+
+            global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
+
+            cfg_wnds.pad_border = derwin(global_wnds.wnd, cfg_dims.pad_border_h, cfg_dims.pad_border_w, cfg_axis.pad_border_y, cfg_axis.pad_border_x);
+
+            cfg_wnds.pad = newpad(cfg_dims.pad_h, cfg_dims.pad_w);
+
+            for (index = 0; index < 4; ++index)
+                cfg_wnds.entries[index].elem.wnd = subpad(cfg_wnds.pad, cfg_dims.entry_h, cfg_dims.entry_w, cfg_axis.entries_y[index], cfg_axis.entries_x[index]);
+
+            global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
+            global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
+
+            box(global_wnds.wnd, ACS_VLINE, ACS_HLINE);
+            box(cfg_wnds.pad_border, ACS_VLINE, ACS_HLINE);
+            box(global_wnds.note_w, ' ', ' ');
+
+            mvwaddch(cfg_wnds.pad_border, 0, cfg_dims.entry_hspacer+cfg_axis.v_delim_x+1, ACS_BSSS);
+            for(index = cfg_axis.entries_y[1]-1; index < cfg_dims.pad_h; index+=1+cfg_dims.entry_h)
+            {
+                if (index < cfg_dims.pad_border_h-1)
+                {
+                    mvwaddch(cfg_wnds.pad_border, index+cfg_dims.entry_h, 0, ACS_LTEE);
+                    mvwaddch(cfg_wnds.pad_border, index+cfg_dims.entry_h, cfg_dims.pad_border_w-1, ACS_RTEE);
+                }
+                mvwhline(cfg_wnds.pad, index, 0, ACS_HLINE, create_dims.pad_w);
+                if (index == cfg_dims.pad_h-1)
+                    mvwaddch(cfg_wnds.pad, index, cfg_dims.entry_hspacer+cfg_axis.v_delim_x, ACS_BTEE);
+                else
+                    mvwaddch(cfg_wnds.pad, index, cfg_dims.entry_hspacer+cfg_axis.v_delim_x, ACS_PLUS);
+                    
+            }
+
+            mvwprintw(global_wnds.wnd, 0, ((global_dims.wnd_w-strlen(PREFS_SCR_LABEL))/2), PREFS_SCR_LABEL);
+
+            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+            for (index = 0; index < 4; ++index)
+            {
+                mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.labels_x[index], cfg_wnds.entries[index].elem.lbl.text);
+            }
+            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+
+            for (index = 0; index < 4; ++index)
+            {
+                mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.v_delim_x, ACS_VLINE);
+                switch (cfg_wnds.entries[index].type)
+                {
+                case ENTRY_TYPE_STRING:
+                case ENTRY_TYPE_SHORT:
+                case ENTRY_TYPE_INT:
+                case ENTRY_TYPE_FLOAT:
+                case ENTRY_TYPE_IP:
+                    mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index], cfg_wnds.entries[index].value_str.text);
+                    if (index == cfg_wnds.line)
+                    {
+                        cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                        cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                        cursor.is_set = true;
+
+                        move(cursor.y, cursor.x);
+                        // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
+                        curs_set(1);
+                    }
+                    break;
+                case ENTRY_TYPE_OPTION:
+                    if (index == cfg_wnds.line)
+                    {
+                        curs_set(0);
+                        wattron(cfg_wnds.entries[index].elem.wnd, A_BOLD);
+                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
+                        wattroff(cfg_wnds.entries[index].elem.wnd, A_BOLD);
+
+                        mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].str_len)/2), "%s", cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].option);
+
+                        wattron(cfg_wnds.entries[index].elem.wnd, A_BOLD);
+                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
+                        wattroff(cfg_wnds.entries[index].elem.wnd, A_BOLD);
+                    }
+                    else
+                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
+                        mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].str_len)/2), "%s", cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].option);
+                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.prefs_wnd.size)/2), note_labels.prefs_wnd.text);
+        }
             break;
+        case WND_CHAT:
+        {
+            if (cur_wnd == WND_NONE)
+            {
+                chat_wnds.tb.max_len = (chat_dims.tb_h-2) * (chat_dims.tb_w-2);
+                chat_wnds.tb.str = malloc(sizeof(char)*chat_wnds.tb.max_len+1);
+                if (chat_wnds.tb.str != NULL)
+                {
+                    memset(chat_wnds.tb.str, NULL, sizeof(char)*chat_wnds.tb.max_len+1);
+                }
+                chat_wnds.tb.lines = 1;
+                chat_wnds.tb.cols = malloc(sizeof(int)*chat_wnds.tb.lines);
+                if (chat_wnds.tb.cols != NULL)
+                {
+                    for (index = 0; index < chat_wnds.tb.lines; ++index)
+                    {
+                        chat_wnds.tb.cols[0] = 0;
+                    }
+                }
+            }
+
+            global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
+
+            chat_wnds.pad_borders[0] = derwin(global_wnds.wnd, chat_dims.tb_h, chat_dims.tb_w, chat_axis.tb_y, chat_axis.tb_x);
+            chat_wnds.pad_borders[1] = derwin(global_wnds.wnd, chat_dims.msg_h, chat_dims.msg_w, chat_axis.msg_y, chat_axis.msg_x);
+            chat_wnds.pad_borders[2] = derwin(global_wnds.wnd, chat_dims.usrs_h, chat_dims.usrs_w, chat_axis.usrs_y, chat_axis.usrs_x);
+
+            chat_wnds.pads[0] = derwin(chat_wnds.pad_borders[0], chat_dims.tb_h-2, chat_dims.tb_w-2, 1, 1);
+            chat_wnds.pads[1] = derwin(chat_wnds.pad_borders[1], chat_dims.msg_h-2, chat_dims.msg_w-2, 1, 1);
+            chat_wnds.pads[2] = derwin(chat_wnds.pad_borders[2], chat_dims.usrs_h-2, chat_dims.usrs_w-2, 1, 1);
+
+            global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
+            global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
+
+            box(global_wnds.wnd, ACS_VLINE, ACS_HLINE);
+            box(chat_wnds.pad_borders[0], ACS_VLINE, ACS_HLINE);
+            box(chat_wnds.pad_borders[1], ACS_VLINE, ACS_HLINE);
+            box(chat_wnds.pad_borders[2], ACS_VLINE, ACS_HLINE);
+            box(global_wnds.note_w, ' ', ' ');
+
+            // wbkgd(chat_wnds.pads[0], COLOR_PAIR(2));
+            // wbkgd(chat_wnds.pads[1], COLOR_PAIR(2));
+            // wbkgd(chat_wnds.pads[2], COLOR_PAIR(2));
+
+            mvwaddch(chat_wnds.pad_borders[0], 0, 0, ACS_LTEE);
+            mvwaddch(chat_wnds.pad_borders[0], 0, chat_dims.tb_w-1, ACS_RTEE);
+
+            mvwaddch(chat_wnds.pad_borders[0], 0, chat_axis.usrs_x-global_axis.wnd_x, ACS_BTEE);
+            mvwaddch(chat_wnds.pad_borders[1], 0, chat_dims.msg_w-1, ACS_BSSS);
+
+            mvwprintw(global_wnds.wnd, 0, (global_dims.wnd_w-(strlen(CHAT_SCR_LABEL)+strlen(chat_wnds.server_name)))/2, CHAT_SCR_LABEL, chat_wnds.server_name);
+
+            mvwprintw(global_wnds.note_sw, 0, ((global_dims.note_w-note_labels.chat_wnd.size)/2), note_labels.chat_wnd.text);
+        }
+            break;
+        case WND_NONE:
         default:
             ret = EXIT_FAILURE;
             break;
@@ -1584,9 +1573,9 @@ int _update_window(void)
                 wnoutrefresh(create_srv.srv_info_w);
                 wnoutrefresh(create_srv.srv_info_sw);
                 wnoutrefresh(create_srv.pad);
-                for (index = 0; index < 7; ++index)
+                for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
                     wnoutrefresh(create_srv.entries[index].elem.wnd);
-                for (index = 0; index < 3; ++index)
+                for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
                     wnoutrefresh(create_srv.btns[index].wnd);
                 wnoutrefresh(global_wnds.note_w);
                 wnoutrefresh(global_wnds.note_sw);
@@ -1597,14 +1586,27 @@ int _update_window(void)
         case WND_PREFS:
             {
                 wnoutrefresh(global_wnds.wnd);
-                wnoutrefresh(cfg_wnd.pad_border);
-                for (index = 0; index < 4; ++index)
-                    wnoutrefresh(cfg_wnd.entries[index].elem.wnd);
+                wnoutrefresh(cfg_wnds.pad_border);
+                for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+                    wnoutrefresh(cfg_wnds.entries[index].elem.wnd);
                 wnoutrefresh(global_wnds.note_w);
                 wnoutrefresh(global_wnds.note_sw);
-                pnoutrefresh(cfg_wnd.pad, cfg_axis.pad_ys, cfg_axis.pad_xs, cfg_axis.vis_pad_ys, cfg_axis.vis_pad_xs, cfg_axis.vis_pad_ye, cfg_axis.vis_pad_xe);
+                pnoutrefresh(cfg_wnds.pad, cfg_axis.pad_ys, cfg_axis.pad_xs, cfg_axis.vis_pad_ys, cfg_axis.vis_pad_xs, cfg_axis.vis_pad_ye, cfg_axis.vis_pad_xe);
                 wnoutrefresh(stdscr);
             }
+            break;
+        case WND_CHAT:
+        {
+            wnoutrefresh(global_wnds.wnd);
+            for (index = 0; index < 3; ++index)
+            {
+                wnoutrefresh(chat_wnds.pads[index]);
+                wnoutrefresh(chat_wnds.pad_borders[index]);
+            }
+            wnoutrefresh(global_wnds.note_w);
+            wnoutrefresh(global_wnds.note_sw);
+            wnoutrefresh(stdscr);
+        }
             break;
         default:
             ret = EXIT_FAILURE;
@@ -1627,175 +1629,367 @@ int _delete_window(void)
             ret = EXIT_FAILURE;
             break;
         case WND_MAIN_MENU:
+        {
+            wclear(stdscr);
+            refresh();
+
+            delwin(global_wnds.note_sw);
+            delwin(global_wnds.note_w);
+            delwin(main_menu.panel_sw);
+            delwin(main_menu.panel_w);
+            for (index = 0; index < 4; ++index)
             {
-                delwin(global_wnds.note_sw);
-                delwin(global_wnds.note_w);
-                delwin(main_menu.panel_sw);
-                delwin(main_menu.panel_w);
-                for (index = 0; index < 4; ++index)
-                {
-                    if (main_menu.btns[index].lbl.text != NULL)
-                        free(main_menu.btns[index].lbl.text);
-                    delwin(main_menu.btns[index].wnd);
-                }
-                delwin(main_menu.btns_border);
-                delwin(main_menu.status_sw);
-                delwin(main_menu.status_w);
-                delwin(main_menu.header_w);
-                delwin(global_wnds.wnd);
-
-                global_wnds.wnd = NULL;
-                main_menu.header_w = NULL;
-                main_menu.status_w = NULL;
-                main_menu.status_sw = NULL;
-                main_menu.btns_border = NULL;
-                for (index = 0; index < 4; ++index)
-                {
-                    main_menu.btns[index].wnd = NULL;
-                    main_menu.btns[index].lbl.text = NULL;
-                }
-                main_menu.panel_w = NULL;
-                main_menu.panel_sw = NULL;
-                global_wnds.note_w = NULL;
-                global_wnds.note_sw = NULL;
-
-                main_menu.selection = 0;
-
-                cur_wnd = WND_NONE;
+                delwin(main_menu.btns[index].wnd);
+                main_menu.btns[index].wnd = NULL;
             }
+            delwin(main_menu.btns_border);
+            delwin(main_menu.status_sw);
+            delwin(main_menu.status_w);
+            delwin(main_menu.header_w);
+            delwin(global_wnds.wnd);
+
+            global_wnds.wnd = NULL;
+            main_menu.header_w = NULL;
+            main_menu.status_w = NULL;
+            main_menu.status_sw = NULL;
+            main_menu.btns_border = NULL;
+            main_menu.panel_w = NULL;
+            main_menu.panel_sw = NULL;
+            global_wnds.note_w = NULL;
+            global_wnds.note_sw = NULL;
+
+            main_menu.selection = 0;
+        }
             break;
         case WND_JOIN_SRV:
-            {
-                if (join_srv.mode == MODE_TEXTBOX)
-                {
-                    curs_set(0);
-                }
+        {
+            wclear(stdscr);
+            refresh();
 
-                delwin(global_wnds.note_sw);
-                delwin(global_wnds.note_w);
-                for (index = 0; index < 3; ++index)
-                {
-                    if (join_srv.btns[index].lbl.text != NULL)
-                        free(join_srv.btns[index].lbl.text);
-                    delwin(join_srv.btns[index].wnd);
-                }
-                delwin(join_srv.btns_border);
-                delwin(join_srv.tb_w);
-                delwin(join_srv.label_w);
-                delwin(join_srv.caddr_w);
-                delwin(join_srv.servers_pad);
-                delwin(join_srv.pad_border);
-                delwin(join_srv.susers_w);
-                delwin(join_srv.saddr_w);
-                delwin(join_srv.sname_w);
-                delwin(join_srv.top_panel);
-                delwin(global_wnds.wnd);
-
-                global_wnds.wnd = NULL;
-                join_srv.top_panel = NULL;
-                join_srv.saddr_w = NULL;
-                join_srv.susers_w = NULL;
-                join_srv.pad_border = NULL;
-                join_srv.servers_pad = NULL;
-                join_srv.pad_border = NULL;
-                join_srv.caddr_w = NULL;
-                join_srv.label_w = NULL;
-                join_srv.tb_w = NULL;
-                join_srv.btns_border = NULL;
-                for (index = 0; index < 3; ++index)
-                {
-                    join_srv.btns[index].wnd = NULL;
-                    join_srv.btns[index].lbl.text = NULL;
-                }
-                global_wnds.note_w = NULL;
-                global_wnds.note_sw = NULL;
-
-                cur_wnd = WND_NONE;
-            }
-            break;
-        case WND_CREATE_SRV:
-            {
-                delwin(global_wnds.note_sw);
-                delwin(global_wnds.note_w);
-
-                for (index = 0; index < 7; ++index)
-                {
-                    if (create_srv.entries[index].elem.lbl.text != NULL)
-                    {
-                        free(create_srv.entries[index].elem.lbl.text);
-                        create_srv.entries[index].elem.lbl.text = NULL;
-                    }
-                    delwin(create_srv.entries[index].elem.wnd);
-                    create_srv.entries[index].elem.wnd = NULL;
-                }
-                delwin(create_srv.srv_info_sw);
-                for (index = 0; index < 3; ++index)
-                {
-                    if (create_srv.btns[index].lbl.text != NULL)
-                    {
-                        free(create_srv.btns[index].lbl.text);
-                        create_srv.btns[index].lbl.text = NULL;
-                    }
-                    delwin(create_srv.btns[index].wnd);
-                    create_srv.btns[index].wnd = NULL;
-                }
-                delwin(create_srv.pad);
-
-                delwin(create_srv.srv_info_w);
-                delwin(create_srv.pad_border);
-                delwin(global_wnds.wnd);
-
-                global_wnds.wnd = NULL;
-
-                create_srv.pad_border = NULL;
-                create_srv.srv_info_w = NULL;
-                create_srv.pad = NULL;
-
-                global_wnds.note_w = NULL;
-                global_wnds.note_sw = NULL;
-
-                cur_wnd = WND_NONE;
-            }
-            break;
-        case WND_PREFS:
+            if (join_srv.mode == MODE_TEXTBOX)
             {
                 curs_set(0);
-
-                delwin(global_wnds.note_sw);
-                delwin(global_wnds.note_w);
-                for (index = 0; index < sizeof(cfg_wnd.entries)/sizeof(struct entry_t); ++index)
-                {
-                    if (cfg_wnd.entries[index].elem.lbl.text != NULL)
-                        free(cfg_wnd.entries[index].elem.lbl.text);
-                    delwin(cfg_wnd.entries[index].elem.wnd);
-
-                    if (cfg_wnd.entries[index].type == ENTRY_TYPE_OPTION && cfg_wnd.entries[index].value_list.options != NULL)
-                    {
-                        free(cfg_wnd.entries[index].value_list.options);
-                        cfg_wnd.entries[index].value_list.options = NULL;
-                    }
-                }
-                delwin(cfg_wnd.pad);
-                delwin(cfg_wnd.pad_border);
-                delwin(global_wnds.wnd);
-
-                global_wnds.wnd = NULL;
-                cfg_wnd.pad_border = NULL;
-                cfg_wnd.pad = NULL;
-                for (index = 0; index < 4; ++index)
-                {
-                    cfg_wnd.entries[index].elem.wnd = NULL;
-                    cfg_wnd.entries[index].elem.lbl.text = NULL;
-                }
-                global_wnds.note_w = NULL;
-                global_wnds.note_sw = NULL;
-
-                cur_wnd = WND_NONE;
             }
+
+            delwin(global_wnds.note_sw);
+            delwin(global_wnds.note_w);
+            for (index = 0; index < 3; ++index)
+            {
+                delwin(join_srv.btns[index].wnd);
+                join_srv.btns[index].wnd = NULL;
+            }
+            delwin(join_srv.btns_border);
+            delwin(join_srv.tb_w);
+            delwin(join_srv.label_w);
+            delwin(join_srv.caddr_w);
+            delwin(join_srv.servers_pad);
+            delwin(join_srv.pad_border);
+            delwin(join_srv.susers_w);
+            delwin(join_srv.saddr_w);
+            delwin(join_srv.sname_w);
+            delwin(join_srv.top_panel);
+            delwin(global_wnds.wnd);
+
+            global_wnds.wnd = NULL;
+            join_srv.top_panel = NULL;
+            join_srv.saddr_w = NULL;
+            join_srv.susers_w = NULL;
+            join_srv.pad_border = NULL;
+            join_srv.servers_pad = NULL;
+            join_srv.pad_border = NULL;
+            join_srv.caddr_w = NULL;
+            join_srv.label_w = NULL;
+            join_srv.tb_w = NULL;
+            join_srv.btns_border = NULL;
+            global_wnds.note_w = NULL;
+            global_wnds.note_sw = NULL;
+        }
+            break;
+        case WND_CREATE_SRV:
+        {
+            wclear(stdscr);
+            refresh();
+
+            curs_set(0);
+
+            delwin(global_wnds.note_sw);
+            delwin(global_wnds.note_w);
+
+            for (index = 0; index < 7; ++index)
+            {
+                delwin(create_srv.entries[index].elem.wnd);
+                create_srv.entries[index].elem.wnd = NULL;
+            }
+            delwin(create_srv.srv_info_sw);
+            for (index = 0; index < 3; ++index)
+            {
+                delwin(create_srv.btns[index].wnd);
+                create_srv.btns[index].wnd = NULL;
+            }
+            delwin(create_srv.pad);
+
+            delwin(create_srv.srv_info_w);
+            delwin(create_srv.pad_border);
+            delwin(global_wnds.wnd);
+
+            global_wnds.wnd = NULL;
+
+            create_srv.pad_border = NULL;
+            create_srv.srv_info_w = NULL;
+            create_srv.pad = NULL;
+
+            global_wnds.note_w = NULL;
+            global_wnds.note_sw = NULL;
+        }
+            break;
+        case WND_PREFS:
+        {
+            wclear(stdscr);
+            refresh();
+
+            curs_set(0);
+
+            delwin(global_wnds.note_sw);
+            delwin(global_wnds.note_w);
+            for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+            {
+                delwin(cfg_wnds.entries[index].elem.wnd);
+                cfg_wnds.entries[index].elem.wnd = NULL;
+            }
+            delwin(cfg_wnds.pad);
+            delwin(cfg_wnds.pad_border);
+            delwin(global_wnds.wnd);
+
+            global_wnds.wnd = NULL;
+            cfg_wnds.pad_border = NULL;
+            cfg_wnds.pad = NULL;
+            global_wnds.note_w = NULL;
+            global_wnds.note_sw = NULL;
+        }
+            break;
+        case WND_CHAT:
+        {
+            wclear(stdscr);
+            refresh();
+
+            delwin(global_wnds.note_sw);
+            delwin(global_wnds.note_w);
+
+            for (index = 0; index < 3; ++index)
+            {
+                delwin(chat_wnds.pads[index]);
+                delwin(chat_wnds.pad_borders[index]);
+                chat_wnds.pads[index] = NULL;
+                chat_wnds.pad_borders[index] = NULL;
+            }
+
+            delwin(global_wnds.wnd);
+
+            global_wnds.wnd = NULL;
+
+            global_wnds.note_w = NULL;
+            global_wnds.note_sw = NULL;
+        }
             break;
         default:
             ret = EXIT_FAILURE;
             break;
+    }
+
+    return ret;
+}
+
+int _free_memory(int mode)
+{
+    int index;
+    int ret = EXIT_SUCCESS;
+
+    switch (mode)
+    {
+    case WND_NONE:
+    {
+        if (note_labels.mmenu_connected.text != NULL)
+        {
+            free(note_labels.mmenu_connected.text);
+        }
+        if (note_labels.mmenu_disconnected.text != NULL)
+        {
+            free(note_labels.mmenu_disconnected.text);
+        }
+        if (note_labels.mmenu_connecting.text != NULL)
+        {
+            free(note_labels.mmenu_connecting.text);
+        }
+        if (note_labels.join_srv.text != NULL)
+        {
+            free(note_labels.join_srv.text);
+        }
+        if (note_labels.create_srv.text != NULL)
+        {
+            free(note_labels.create_srv.text);
+        }
+        if (note_labels.prefs_wnd.text != NULL)
+        {
+            free(note_labels.prefs_wnd.text);
+        }
+        if (note_labels.chat_wnd.text != NULL)
+        {
+            free(note_labels.chat_wnd.text);
+        }
+
+        for (index = 0; index < sizeof(main_menu.btns)/sizeof(struct elem_wnd_t); ++index)
+        {
+            if (main_menu.btns[index].lbl.text != NULL)
+            {
+                free(main_menu.btns[index].lbl.text);
+                main_menu.btns[index].lbl.text = NULL;
+            }
+        }
+        
+        for (index = 0; index < sizeof(join_srv.btns)/sizeof(struct elem_wnd_t); ++index)
+        {
+            if (join_srv.btns[index].lbl.text != NULL)
+            {
+                free(join_srv.btns[index].lbl.text);
+                join_srv.btns[index].lbl.text = NULL;
+            }
+        }
+        
+        for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
+        {
+            if (create_srv.entries[index].elem.lbl.text != NULL)
+            {
+                free(create_srv.entries[index].elem.lbl.text);
+                create_srv.entries[index].elem.lbl.text = NULL;
+            }
+            if (create_srv.entries[index].type == ENTRY_TYPE_OPTION && create_srv.entries[index].value_list.options != NULL)
+            {
+                free(create_srv.entries[index].value_list.options);
+                create_srv.entries[index].value_list.options = NULL;
+                create_srv.entries[index].type == ENTRY_TYPE_NONE;
+            }
+        }
+        for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
+        {
+            if (create_srv.btns[index].lbl.text != NULL)
+            {
+                free(create_srv.btns[index].lbl.text);
+                create_srv.btns[index].lbl.text = NULL;
+            }
+        }
+        
+        for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+        {
+            if (cfg_wnds.entries[index].elem.lbl.text != NULL)
+            {
+                free(cfg_wnds.entries[index].elem.lbl.text);
+                cfg_wnds.entries[index].elem.lbl.text = NULL;
+            }
+            if (cfg_wnds.entries[index].type == ENTRY_TYPE_OPTION && cfg_wnds.entries[index].value_list.options != NULL)
+            {
+                free(cfg_wnds.entries[index].value_list.options);
+                cfg_wnds.entries[index].value_list.options = NULL;
+                cfg_wnds.entries[index].type == ENTRY_TYPE_NONE;
+            }
+        }
+
+        if (chat_wnds.tb.str != NULL)
+        {
+            free(chat_wnds.tb.str);
+            chat_wnds.tb.str = NULL;
+        }
+        if (chat_wnds.tb.cols != NULL)
+        {
+            free(chat_wnds.tb.cols);
+            chat_wnds.tb.cols = NULL;
+        }
+    }
+        break;
+    case WND_MAIN_MENU:
+    {
+        for (index = 0; index < sizeof(main_menu.btns)/sizeof(struct elem_wnd_t); ++index)
+        {
+            if (main_menu.btns[index].lbl.text != NULL)
+            {
+                free(main_menu.btns[index].lbl.text);
+                main_menu.btns[index].lbl.text = NULL;
+            }
+        }
+    }
+        break;
+    case WND_JOIN_SRV:
+    {
+        for (index = 0; index < sizeof(join_srv.btns)/sizeof(struct elem_wnd_t); ++index)
+        {
+            if (join_srv.btns[index].lbl.text != NULL)
+            {
+                free(join_srv.btns[index].lbl.text);
+                join_srv.btns[index].lbl.text = NULL;
+            }
+        }
+    }
+        break;
+    case WND_CREATE_SRV:
+    {
+        for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
+        {
+            if (create_srv.entries[index].elem.lbl.text != NULL)
+            {
+                free(create_srv.entries[index].elem.lbl.text);
+                create_srv.entries[index].elem.lbl.text = NULL;
+            }
+            if (create_srv.entries[index].type == ENTRY_TYPE_OPTION && create_srv.entries[index].value_list.options != NULL)
+            {
+                free(create_srv.entries[index].value_list.options);
+                create_srv.entries[index].value_list.options = NULL;
+                create_srv.entries[index].type == ENTRY_TYPE_NONE;
+            }
+        }
+        for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
+        {
+            if (create_srv.btns[index].lbl.text != NULL)
+            {
+                free(create_srv.btns[index].lbl.text);
+                create_srv.btns[index].lbl.text = NULL;
+            }
+        }
+    }
+        break;
+    case WND_PREFS:
+    {
+        for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+        {
+            if (cfg_wnds.entries[index].elem.lbl.text != NULL)
+            {
+                free(cfg_wnds.entries[index].elem.lbl.text);
+                cfg_wnds.entries[index].elem.lbl.text = NULL;
+            }
+            if (cfg_wnds.entries[index].type == ENTRY_TYPE_OPTION && cfg_wnds.entries[index].value_list.options != NULL)
+            {
+                free(cfg_wnds.entries[index].value_list.options);
+                cfg_wnds.entries[index].value_list.options = NULL;
+                cfg_wnds.entries[index].type == ENTRY_TYPE_NONE;
+            }
+        }
+    }
+        break;
+    case WND_CHAT:
+    {
+        if (chat_wnds.tb.str != NULL)
+        {
+            free(chat_wnds.tb.str);
+            chat_wnds.tb.str = NULL;
+        }
+        if (chat_wnds.tb.cols != NULL)
+        {
+            free(chat_wnds.tb.cols);
+            chat_wnds.tb.cols = NULL;
+        }
+    }
+        break;
+    default:
+        ret = EXIT_FAILURE;
+        break;
     }
 
     return ret;
@@ -2009,18 +2203,20 @@ int menu_wnd(int *option)
 	}
 
     _delete_window();
+    _free_memory(cur_wnd);
+    cur_wnd = WND_NONE;
 
     return ret;
 }
 
-int join_srv_wnd(int *option)
+int join_srv_wnd(int *option, char *server_name)
 {
     int symbol;
     int index;
     int run_flag = 1;
     int ret = EXIT_SUCCESS;
     
-    join_srv.mode = MODE_LIST;
+    join_srv.mode = MODE_PAD;
     join_srv.line = 0;
     join_srv.selection = 0;
 
@@ -2040,15 +2236,18 @@ int join_srv_wnd(int *option)
         {
             case '\n':
             {
-                char *ch = servers_info[join_srv.line].server_name;
-                popup_wnd(ch, POPUP_W_WAIT);
+                // char *ch = servers_info[join_srv.line].server_name;
+                strncpy(server_name, servers_info[join_srv.line].server_name, STR_LEN);
+                // popup_wnd(server_name, POPUP_W_WAIT);
+                *option = WND_CHAT;
+                run_flag = 0;
             }
                 break;
             case '\t':
             {
                 switch (join_srv.mode)
                 {
-                    case MODE_LIST:
+                    case MODE_PAD:
                         mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
                         mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
                         mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
@@ -2060,14 +2259,19 @@ int join_srv_wnd(int *option)
                         mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
 
                         join_srv.mode = MODE_TEXTBOX;
-                            
-                        move(global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y, global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x);
+
+                        cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
+                        cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x;
+                        cursor.is_set = true;
+
+                        move(cursor.y, cursor.x);
+                        // move(global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y, global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x);
                         curs_set(1);
                         break;
                     case MODE_TEXTBOX:
                         curs_set(0);
 
-                        join_srv.mode = MODE_LIST;
+                        join_srv.mode = MODE_PAD;
 
                         wattron(join_srv.servers_pad, COLOR_PAIR(2));
                         mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
@@ -2144,7 +2348,7 @@ int join_srv_wnd(int *option)
 
         switch (join_srv.mode)
         {
-            case MODE_LIST:
+            case MODE_PAD:
             {
                 switch (symbol)
                 {
@@ -2238,11 +2442,13 @@ int join_srv_wnd(int *option)
     }
 
     _delete_window();
+    _free_memory(cur_wnd);
+    cur_wnd = WND_NONE;
 
     return ret;
 }
 
-int create_srv_wnd(int *option)
+int create_srv_wnd(int *option, char *server_name)
 {
     int symbol;
     int index;
@@ -2316,10 +2522,20 @@ int create_srv_wnd(int *option)
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
                         case ENTRY_TYPE_IP:
-                            move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                        {
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.is_set = true;
+
+                            move(cursor.y, cursor.x);
+                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             curs_set(1);
+                        }
+                            
                             break;
                         case ENTRY_TYPE_OPTION:
+                        {
+                            cursor.is_set = false;
                             curs_set(0);
 
                             wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
@@ -2328,6 +2544,7 @@ int create_srv_wnd(int *option)
                             wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
                             mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                        }
                             break;
                         default:
                             break;
@@ -2404,10 +2621,20 @@ int create_srv_wnd(int *option)
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
                         case ENTRY_TYPE_IP:
-                            move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                        {
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.is_set = true;
+
+                            move(cursor.y, cursor.x);
+                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             curs_set(1);
+                        }
+                            
                             break;
                         case ENTRY_TYPE_OPTION:
+                        {
+                            cursor.is_set = false;
                             curs_set(0);
 
                             wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
@@ -2416,6 +2643,7 @@ int create_srv_wnd(int *option)
                             wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
                             mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                        }
                             break;
                         default:
                             break;
@@ -2460,10 +2688,19 @@ int create_srv_wnd(int *option)
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
                         case ENTRY_TYPE_IP:
-                            move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                        {
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.is_set = true;
+
+                            move(cursor.y, cursor.x);
+                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             curs_set(1);
+                        }
                             break;
                         case ENTRY_TYPE_OPTION:
+                        {
+                            cursor.is_set = false;
                             curs_set(0);
 
                             wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
@@ -2473,6 +2710,7 @@ int create_srv_wnd(int *option)
                             wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
                             mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                        }
                             break;
                         default:
                             break;
@@ -2490,13 +2728,22 @@ int create_srv_wnd(int *option)
                     case ENTRY_TYPE_INT:
                     case ENTRY_TYPE_FLOAT:
                     case ENTRY_TYPE_IP:
+                    {
                         if (create_srv.entries[create_srv.line].selection > 0)
                         {
                             create_srv.entries[create_srv.line].selection--;
-                            move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+
+                            move(cursor.y, cursor.x);
+                            // mvwprintw(global_wnds.wnd, 0, 0, "<%d:%d>", create_srv.entries[create_srv.line].selection,create_srv.entries[create_srv.line].value_str.max_len);
+                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                         }
+                    }
+                        
                         break;
                     case ENTRY_TYPE_OPTION:
+                    {
                         if (create_srv.entries[create_srv.line].selection > 0)
                         {
                             create_srv.entries[create_srv.line].selection--;
@@ -2512,6 +2759,7 @@ int create_srv_wnd(int *option)
                             mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
                         }
+                    }
                         break;
                     default:
                         break;
@@ -2528,13 +2776,24 @@ int create_srv_wnd(int *option)
                     case ENTRY_TYPE_INT:
                     case ENTRY_TYPE_FLOAT:
                     case ENTRY_TYPE_IP:
+                    {
                         if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.str_len)
                         {
-                            create_srv.entries[create_srv.line].selection++;
-                            move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].selection++;
+                                cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+
+                                move(cursor.y, cursor.x);
+                            }
+                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
+                            // mvwprintw(global_wnds.wnd, 0, 0, "<%d:%d>", create_srv.entries[create_srv.line].selection, create_srv.entries[create_srv.line].value_str.max_len);
                         }
+                    }
                         break;
                     case ENTRY_TYPE_OPTION:
+                    {
                         if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_list.size-1)
                         {
                             create_srv.entries[create_srv.line].selection++;
@@ -2550,6 +2809,7 @@ int create_srv_wnd(int *option)
                             mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
                         }
+                    }
                         break;
                     default:
                         break;
@@ -2557,7 +2817,228 @@ int create_srv_wnd(int *option)
                     _update_window();
                 }
                     break;
+                case KEY_BACKSPACE:
+                {
+                    if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                    {
+                        create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = 0;
+                    }
+                    else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                    {
+                        _remove_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, create_srv.entries[create_srv.line].selection-1);
+                    }
+
+                    if (create_srv.entries[create_srv.line].selection > 0)
+                    {
+                        create_srv.entries[create_srv.line].selection--;
+                        cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                        cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+
+                        move(cursor.y, cursor.x);
+                    }
+                    if (create_srv.entries[create_srv.line].value_str.str_len > 0)
+                        create_srv.entries[create_srv.line].value_str.str_len--;
+                    
+                    if (create_srv.entries[create_srv.line].value_str.str_len == 0)
+                    {
+                        switch (create_srv.entries[create_srv.line].type)
+                        {
+                        case ENTRY_TYPE_SHORT:
+                        {
+                            *((short *)create_srv.entries[create_srv.line].value_ptr) = 0;
+                        }
+                            break;
+                        case ENTRY_TYPE_INT:
+                        {
+                            *((int *)create_srv.entries[create_srv.line].value_ptr) = 0;
+                        }
+                            break;
+                        case ENTRY_TYPE_FLOAT:
+                        {
+                            *((float *)create_srv.entries[create_srv.line].value_ptr) = 0;
+                        }
+                            break;
+                        default:
+                            break;
+                        }
+                        create_srv.entries[create_srv.line].value_str.text[0] = '0';
+                    }
+
+                    wclear(create_srv.srv_info_sw);
+                    if (*((short *)create_srv.entries[1].value_ptr) == 0)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, CREATE_SCR_NO_RESTR_LABEL, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, create_srv.entries[1].value_str.text, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+
+                    mvwhline(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
+                    mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], "%s", create_srv.entries[create_srv.line].value_str.text);
+                    _update_window();
+                }
+                    break;
                 default:
+                {
+                    switch (create_srv.entries[create_srv.line].type)
+                    {
+                    case ENTRY_TYPE_STRING:
+                    {
+                        if (symbol > 0x1F && symbol < 0x7F)
+                        {
+                            if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = (char)symbol;
+                            }
+                            else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                _put_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, (char)symbol, create_srv.entries[create_srv.line].selection);
+                            }
+
+                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].selection++;
+                                cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+
+                                move(cursor.y, cursor.x);
+                            }
+
+                            if (create_srv.entries[create_srv.line].value_str.str_len != create_srv.entries[create_srv.line].value_str.max_len)
+                                create_srv.entries[create_srv.line].value_str.str_len++;
+                        }
+                    }
+                        break;
+                    case ENTRY_TYPE_SHORT:
+                    case ENTRY_TYPE_INT:
+                    {
+                        switch (symbol)
+                        {
+                        case '0':
+                        case '1':
+                        case '2':
+                        case '3':
+                        case '4':
+                        case '5':
+                        case '6':
+                        case '7':
+                        case '8':
+                        case '9':
+                        {
+                            if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = (char)symbol;
+                            }
+                            else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                _put_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, (char)symbol, create_srv.entries[create_srv.line].selection);
+                            }
+
+                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].selection++;
+                                cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+
+                                move(cursor.y, cursor.x);
+                            }
+
+                            if (create_srv.entries[create_srv.line].value_str.str_len != create_srv.entries[create_srv.line].value_str.max_len)
+                                create_srv.entries[create_srv.line].value_str.str_len++;
+                        }
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                        break;
+                    case ENTRY_TYPE_FLOAT:
+                    case ENTRY_TYPE_IP:
+                    {
+                        switch (symbol)
+                        {
+                        case '0':
+                        case '1':
+                        case '2':
+                        case '3':
+                        case '4':
+                        case '5':
+                        case '6':
+                        case '7':
+                        case '8':
+                        case '9':
+                        case '.':
+                        {
+                            if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = (char)symbol;
+                            }
+                            else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                _put_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, (char)symbol, create_srv.entries[create_srv.line].selection);
+                            }
+
+                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            {
+                                create_srv.entries[create_srv.line].selection++;
+                                cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+
+                                move(cursor.y, cursor.x);
+                            }
+
+                            if (create_srv.entries[create_srv.line].value_str.str_len != create_srv.entries[create_srv.line].value_str.max_len)
+                                create_srv.entries[create_srv.line].value_str.str_len++;
+                        }
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+
+                    switch (create_srv.entries[create_srv.line].type)
+                    {
+                    case ENTRY_TYPE_STRING:
+                    {
+                        strncpy((char *)create_srv.entries[create_srv.line].value_ptr, create_srv.entries[create_srv.line].value_str.text, ((char *)create_srv.entries[create_srv.line].ptr_size));
+                    }
+                        break;
+                    case ENTRY_TYPE_SHORT:
+                    {
+                        
+                        *((short *)create_srv.entries[create_srv.line].value_ptr) = (short)atoi(create_srv.entries[create_srv.line].value_str.text);
+                    }
+                        break;
+                    case ENTRY_TYPE_INT:
+                    {
+                        *((int *)create_srv.entries[create_srv.line].value_ptr) = atoi(create_srv.entries[create_srv.line].value_str.text);
+                    }
+                        break;
+                    case ENTRY_TYPE_FLOAT:
+                    {
+                        *((float *)create_srv.entries[create_srv.line].value_ptr) = (float)atof(create_srv.entries[create_srv.line].value_str.text);
+                    }
+                        break;
+                    case ENTRY_TYPE_IP:
+                    {
+                        strncpy((char *)create_srv.entries[create_srv.line].value_ptr, create_srv.entries[create_srv.line].value_str.text, ((char *)create_srv.entries[create_srv.line].ptr_size));
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+                    
+                    wclear(create_srv.srv_info_sw);
+                    if (*((short *)create_srv.entries[1].value_ptr) == 0)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, CREATE_SCR_NO_RESTR_LABEL, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, create_srv.entries[1].value_str.text, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+
+                    mvwhline(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
+                    mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], "%s", create_srv.entries[create_srv.line].value_str.text);
+                    _update_window();
+                }
                     break;
                 }
             }
@@ -2566,6 +3047,24 @@ int create_srv_wnd(int *option)
             {
                 switch (symbol)
                 {
+                case '\n':
+                {
+                    switch (create_srv.selection)
+                    {
+                    case 0:
+                    {
+                        strncpy(server_name, servers_info[join_srv.line].server_name, STR_LEN);
+                        // popup_wnd(server_name, POPUP_W_WAIT);
+                        *option = WND_CHAT;
+                        run_flag = 0;
+                    }
+                        break;
+                    
+                    default:
+                        break;
+                    }
+                }
+                    break;
                 case KEY_LEFT:
                 {
                     if (create_srv.selection > 0)
@@ -2609,20 +3108,22 @@ int create_srv_wnd(int *option)
     }
 
     _delete_window();
+    _free_memory(cur_wnd);
+    cur_wnd = WND_NONE;
 
     return ret;
 }
 
-int prefs_wnd(int *option)
+int cfg_wnd(int *option)
 {
     int symbol;
     int index;
     int run_flag = 1;
     int ret = EXIT_SUCCESS;
     
-    int elems_count = sizeof(cfg_wnd.entries)/sizeof(struct entry_t);
+    int elems_count = sizeof(cfg_wnds.entries)/sizeof(struct entry_t);
     cfg_dims.pad_h = cfg_dims.entry_h*elems_count + elems_count;
-    cfg_wnd.line = 0;
+    cfg_wnds.line = 0;
 
     _draw_window(WND_PREFS);
 
@@ -2642,48 +3143,62 @@ int prefs_wnd(int *option)
                 break;
             case KEY_UP:
                 {
-                    if (cfg_wnd.line > 0)
+                    if (cfg_wnds.line > 0)
                     {
-                        mvwprintw(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, 0, cfg_wnd.entries[cfg_wnd.line].elem.lbl.text);
+                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
 
-                        switch (cfg_wnd.entries[cfg_wnd.line].type)
+                        switch (cfg_wnds.entries[cfg_wnds.line].type)
                         {
                         case ENTRY_TYPE_STRING:
+                        case ENTRY_TYPE_SHORT:
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
+                        case ENTRY_TYPE_IP:
                             curs_set(0);
                             break;
                         case ENTRY_TYPE_OPTION:
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]-1, '<');
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+LABEL_LEN, '>');
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
                             break;
                         default:
                             break;
                         }
 
-                        cfg_wnd.line--;
+                        cfg_wnds.line--;
 
-                        wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, 0, cfg_wnd.entries[cfg_wnd.line].elem.lbl.text);
-                        wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
+                        wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
-                        switch (cfg_wnd.entries[cfg_wnd.line].type)
+                        switch (cfg_wnds.entries[cfg_wnds.line].type)
                         {
                         case ENTRY_TYPE_STRING:
+                        case ENTRY_TYPE_SHORT:
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
-                            move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnd.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnd.line]+cfg_axis.fields_x[cfg_wnd.line]+cfg_wnd.entries[cfg_wnd.line].selection);
+                        case ENTRY_TYPE_IP:
+                        {
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            cursor.is_set = true;
+
+                            move(cursor.y, cursor.x);
+                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                             curs_set(1);
+                        }
                             break;
                         case ENTRY_TYPE_OPTION:
+                        {
+                            cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]-1, '<');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                        }
                             break;
                         default:
                             break;
@@ -2694,49 +3209,63 @@ int prefs_wnd(int *option)
                 break;
             case KEY_DOWN:
                 {
-                    if (cfg_wnd.line < elems_count-1)
+                    if (cfg_wnds.line < elems_count-1)
                     {
-                        mvwprintw(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, 0, cfg_wnd.entries[cfg_wnd.line].elem.lbl.text);
+                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
 
-                        switch (cfg_wnd.entries[cfg_wnd.line].type)
+                        switch (cfg_wnds.entries[cfg_wnds.line].type)
                         {
                         case ENTRY_TYPE_STRING:
+                        case ENTRY_TYPE_SHORT:
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
+                        case ENTRY_TYPE_IP:
                             curs_set(0);
                             break;
                         case ENTRY_TYPE_OPTION:
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]-1, '<');
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+LABEL_LEN, '>');
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
                             break;
                         default:
                             break;
                         }
 
-                        cfg_wnd.line++;
+                        cfg_wnds.line++;
 
-                        wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, 0, cfg_wnd.entries[cfg_wnd.line].elem.lbl.text);
-                        wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
+                        wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
-                        switch (cfg_wnd.entries[cfg_wnd.line].type)
+                        switch (cfg_wnds.entries[cfg_wnds.line].type)
                         {
                         case ENTRY_TYPE_STRING:
+                        case ENTRY_TYPE_SHORT:
                         case ENTRY_TYPE_INT:
                         case ENTRY_TYPE_FLOAT:
-                            move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnd.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnd.line]+cfg_axis.fields_x[cfg_wnd.line]+cfg_wnd.entries[cfg_wnd.line].selection);
+                        case ENTRY_TYPE_IP:
+                        {
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            cursor.is_set = true;
+
+                            move(cursor.y, cursor.x);
+                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                             curs_set(1);
+                        }
                             break;
                         case ENTRY_TYPE_OPTION:
+                        {
+                            cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]-1, '<');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
 
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                        }
                             break;
                         default:
                             break;
@@ -2747,32 +3276,44 @@ int prefs_wnd(int *option)
                 break;
             case KEY_LEFT:
                 {
-                    switch (cfg_wnd.entries[cfg_wnd.line].type)
+                    switch (cfg_wnds.entries[cfg_wnds.line].type)
                     {
                     case ENTRY_TYPE_STRING:
+                    case ENTRY_TYPE_SHORT:
                     case ENTRY_TYPE_INT:
                     case ENTRY_TYPE_FLOAT:
-                        if (cfg_wnd.entries[cfg_wnd.line].selection > 0)
+                    case ENTRY_TYPE_IP:
+                    {
+                        
+                        if (cfg_wnds.entries[cfg_wnds.line].selection > 0)
                         {
-                            cfg_wnd.entries[cfg_wnd.line].selection--;
-                            move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnd.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnd.line]+cfg_axis.fields_x[cfg_wnd.line]+cfg_wnd.entries[cfg_wnd.line].selection);
+                            cfg_wnds.entries[cfg_wnds.line].selection--;
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+
+                            move(cursor.y, cursor.x);
+                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                         }
+                    }
                         break;
                     case ENTRY_TYPE_OPTION:
-                        if (cfg_wnd.entries[cfg_wnd.line].selection > 0)
+                    {
+                        if (cfg_wnds.entries[cfg_wnds.line].selection > 0)
                         {
-                            cfg_wnd.entries[cfg_wnd.line].selection--;
+                            cfg_wnds.entries[cfg_wnds.line].selection--;
                             
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]-1, '<');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
 
-                            mvwprintw(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+((LABEL_LEN-cfg_wnd.entries[cfg_wnd.line].value_list.options[cfg_wnd.entries[cfg_wnd.line].selection].str_len)/2), "%s", cfg_wnd.entries[cfg_wnd.line].value_list.options[cfg_wnd.entries[cfg_wnd.line].selection].option);
+                            mvwhline(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
+                            mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+((LABEL_LEN-cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].str_len)/2), "%s", cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].option);
 
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
                         }
+                    }
                         break;
                     default:
                         break;
@@ -2782,31 +3323,41 @@ int prefs_wnd(int *option)
                 break;
             case KEY_RIGHT:
                 {
-                    switch (cfg_wnd.entries[cfg_wnd.line].type)
+                    switch (cfg_wnds.entries[cfg_wnds.line].type)
                     {
                     case ENTRY_TYPE_STRING:
+                    case ENTRY_TYPE_SHORT:
                     case ENTRY_TYPE_INT:
                     case ENTRY_TYPE_FLOAT:
-                        if (cfg_wnd.entries[cfg_wnd.line].selection < cfg_wnd.entries[cfg_wnd.line].value_str.str_len)
+                    case ENTRY_TYPE_IP:
+                    {
+                        if (cfg_wnds.entries[cfg_wnds.line].selection < cfg_wnds.entries[cfg_wnds.line].value_str.str_len)
                         {
-                            cfg_wnd.entries[cfg_wnd.line].selection++;
-                            move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnd.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnd.line]+cfg_axis.fields_x[cfg_wnd.line]+cfg_wnd.entries[cfg_wnd.line].selection);
+                            cfg_wnds.entries[cfg_wnds.line].selection++;
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            
+                            move(cursor.y, cursor.x);
+                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                         }
+                    }
+                        
                         break;
                     case ENTRY_TYPE_OPTION:
-                        if (cfg_wnd.entries[cfg_wnd.line].selection < cfg_wnd.entries[cfg_wnd.line].value_list.size-1)
+                        if (cfg_wnds.entries[cfg_wnds.line].selection < cfg_wnds.entries[cfg_wnds.line].value_list.size-1)
                         {
-                            cfg_wnd.entries[cfg_wnd.line].selection++;
+                            cfg_wnds.entries[cfg_wnds.line].selection++;
                             
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]-1, '<');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
 
-                            mvwprintw(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+((LABEL_LEN-cfg_wnd.entries[cfg_wnd.line].value_list.options[cfg_wnd.entries[cfg_wnd.line].selection].str_len)/2), "%s", cfg_wnd.entries[cfg_wnd.line].value_list.options[cfg_wnd.entries[cfg_wnd.line].selection].option);
+                            mvwhline(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
+                            mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+((LABEL_LEN-cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].str_len)/2), "%s", cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].option);
 
-                            wattron(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnd.entries[cfg_wnd.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnd.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnd.entries[cfg_wnd.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
                         }
                         break;
                     default:
@@ -2816,7 +3367,8 @@ int prefs_wnd(int *option)
                 }
                 break;
             case KEY_F(1):
-
+            {
+            }
                 break;
             case KEY_F(2):
                 {
@@ -2840,6 +3392,162 @@ int prefs_wnd(int *option)
     }
 
     _delete_window();
+    _free_memory(cur_wnd);
+    cur_wnd = WND_NONE;
+
+    return ret;
+}
+
+int chat_wnd(int *option, char *server_name)
+{
+    int symbol;
+    int index;
+
+    int run_flag = 1;
+    int ret = EXIT_SUCCESS;
+
+    chat_wnds.server_name = server_name;
+
+    chat_axis.pad_ys[0] = 0;
+    chat_axis.pad_xs[0] = 0;
+    chat_axis.pad_ye[0] = chat_dims.vis_pad_h[0] - 1;
+    chat_axis.pad_xe[0] = chat_dims.vis_pad_w[0] - 1;
+
+    chat_axis.pad_ys[1] = 0;
+    chat_axis.pad_xs[1] = 0;
+    chat_axis.pad_ye[1] = chat_dims.vis_pad_h[1] - 1;
+    chat_axis.pad_xe[1] = chat_dims.vis_pad_w[1] - 1;
+
+    chat_axis.pad_ys[2] = 0;
+    chat_axis.pad_xs[2] = 0;
+    chat_axis.pad_ye[2] = chat_dims.vis_pad_h[2] - 1;
+    chat_axis.pad_xe[2] = chat_dims.vis_pad_w[2] - 1;
+
+    _draw_window(WND_CHAT);
+
+    while(run_flag != 0)
+    {
+        symbol = wgetch(global_wnds.wnd);
+        switch (symbol)
+        {
+            case '\n':
+            {
+                _update_window();
+            }
+                break;
+            case '\t':
+            {
+                switch (chat_wnds.mode)
+                {
+                    case MODE_PAD:
+                    {
+                        
+                    }
+                        break;
+                    case MODE_TEXTBOX:
+                    {
+                        
+                    }
+                        break;
+                    default:
+                        break;
+                }
+                _update_window();
+            }
+                break;
+            case KEY_F(1):
+            {}
+                break;
+            case KEY_F(2):
+            {}
+                break;
+            case KEY_F(3):
+            {
+                *option = WND_MAIN_MENU;
+                run_flag = 0;
+            }
+                break;
+            case KEY_F(4):
+            {
+                *option = WND_NONE;
+                run_flag = 0;
+            }
+                break;
+            default:
+                break;
+        }
+
+        switch (chat_wnds.mode)
+        {
+            case MODE_PAD:
+            {
+                
+            }
+                break;
+            case MODE_TEXTBOX:
+            {
+                switch (symbol)
+                {
+                case '\n':
+                {
+                    
+                }
+                    break;
+                case KEY_LEFT:
+                {
+                    // if (chat_wnds.curs_y > 0)
+                    // {
+                    //     if (chat_wnds.curs_x > 0)
+                    //     {
+
+                    //     }
+                    //     // else
+                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
+
+                    //     create_srv.selection--;
+
+                    //     wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
+                    //     wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+
+                    //     _update_window();
+                    // }
+                    // else if (chat_wnds.curs_x > 0)
+                    // {
+                    //     chat_wnds.curs_x--;
+                    //     chat_wnds.char_index--;
+                    // }
+                }
+                    break;
+                case KEY_RIGHT:
+                {
+                    // if (create_srv.selection < 2)
+                    // {
+                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
+
+                    //     create_srv.selection++;
+
+                    //     wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
+                    //     wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+
+                    //     _update_window();
+                    // }
+                }
+                    break;
+                default:
+                    break;
+                }
+            }
+                break;
+            default:
+                break;
+        }
+    }
+
+    _delete_window();
+    _free_memory(cur_wnd);
+    cur_wnd = WND_NONE;
 
     return ret;
 }

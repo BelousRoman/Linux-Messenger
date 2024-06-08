@@ -273,7 +273,7 @@ int modify_config_entry(__uint8_t entry, void *var)
     {
     case ENTRY_USERNAME:
         char *username = (char *)var;
-        strncpy(config.name, username, NAME_LEN);
+        strncpy(config.name, username, STR_LEN);
 
         ret += AddOrModifyEntry("username", TYPE_STRING, config.name);
         break;

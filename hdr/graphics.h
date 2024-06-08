@@ -58,9 +58,9 @@
 #define MENU_SCR_SRV_BTN_LABEL          "Create a server"
 #define MENU_SCR_CFG_BTN_LABEL          "Configuration"
 #define MENU_SCR_QUIT_BTN_LABEL         "Quit"
-#define MENU_SCR_NOTE_CONNECTED         "F1: Help\tF2: Reconnect\tF3: Disconnect\tF4: Quit"
-#define MENU_SCR_NOTE_DISCONNECTED      "F1: Help\tF2: Connect\tF3: Change address\tF4: Quit"
-#define MENU_SCR_NOTE_CONNECTING        "F1: Help\tF4: Quit"
+#define MENU_SCR_NOTE_CONNECTED         "F1: Info\tF2: Reconnect\tF3: Disconnect\tF4: Quit"
+#define MENU_SCR_NOTE_DISCONNECTED      "F1: Info\tF2: Connect\tF3: Change address\tF4: Quit"
+#define MENU_SCR_NOTE_CONNECTING        "F1: Info\tF4: Quit"
 
 #define JOIN_SCR_LABEL                  "Join server"
 #define JOIN_SCR_SRV_NAME_LABEL         "Server name"
@@ -70,10 +70,11 @@
 #define JOIN_SCR_JOIN_BTN_LABEL         "Join"
 #define JOIN_SCR_REFRESH_BTN_LABEL      "Refresh"
 #define JOIN_SCR_CLEAR_BTN_LABEL        "Clear"
-#define JOIN_SCR_NOTE                   "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
+#define JOIN_SCR_NOTE                   "TAB: Change mode\tF1: Info\tF3: Back\tF4: Quit"
 
 #define CREATE_SCR_LABEL                "Create server"
-#define CREATE_SCR_SRV_INFO_TEMPLATE    "Server properties:\n* Server name:\t\t%s\n* Maximum users:\t%s\n* Address:\t\t%s"
+#define CREATE_SCR_SRV_INFO_TEMPLATE    "Server properties:\n* Server name:\t\t%s\n* Maximum users:\t%s\n* Address:\t\t%s:%d"
+#define CREATE_SCR_NO_RESTR_LABEL       "Not restricted"
 #define CREATE_SCR_SRV_NAME_LABEL       "Server name"
 #define CREATE_SCR_CONN_USERS_LABEL     "Maximum users"
 #define CREATE_SCR_RESTR_USERS_LABEL    "Users restriction"
@@ -84,11 +85,11 @@
 #define CREATE_SCR_CREATE_BTN_LABEL     "Create"
 #define CREATE_SCR_DEFAULT_BTN_LABEL    "Default"
 #define CREATE_SCR_CLEAR_BTN_LABEL      "Clear"
-#define CREATE_DEF_SRV_NAME             "Default"
+#define CREATE_DEF_SRV_NAME             "Default name"
 #define CREATE_DEF_USR_RESTR            10
 #define CREATE_DEF_SRV_IP               "127.0.0.1"
 #define CREATE_DEF_SRV_PORT             27015
-#define CREATE_SCR_NOTE                 "TAB: Change mode\tF1: Help\tF3: Back\tF4: Quit"
+#define CREATE_SCR_NOTE                 "TAB: Change mode\tF1: Info\tF3: Back\tF4: Quit"
 
 #define PREFS_SCR_LABEL                 "Preferences"
 #define PREFS_USERNAME_LABEL            "Username"
@@ -97,7 +98,10 @@
 #define PREFS_PORT_LABEL                "Port"
 #define PREFS_LANG_EN_LABEL             "English"
 #define PREFS_LANG_RU_LABEL             "Russian"
-#define PREFS_SCR_NOTE                  "F1: Save\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
+#define PREFS_SCR_NOTE                  "F1: Info\tF2: Menu\tF3: Back\tF4: Quit\tF5: Save\tF6: Cancel\tF7: Reset"
+
+#define CHAT_SCR_LABEL                  "Chat: \"%s\""
+#define CHAT_SCR_NOTE                   "F1: Info\tF3: Back\tF4: Quit\t"
 
 #define OPTIONS_TRUE_LABEL              "Yes"
 #define OPTIONS_FALSE_LABEL             "No"
@@ -108,7 +112,8 @@ enum cur_wnd_enum
     WND_MAIN_MENU,
     WND_JOIN_SRV,
     WND_CREATE_SRV,
-    WND_PREFS
+    WND_PREFS,
+    WND_CHAT
 };
 
 enum popup_wnd_type
@@ -119,21 +124,23 @@ enum popup_wnd_type
     POPUP_W_INFO
 };
 
-enum join_wnd_tab_mode
-{
-    MODE_LIST = 1,
-    MODE_TEXTBOX
-};
-
-enum create_wnd_tab_mode
+enum tab_mode
 {
     MODE_PAD = 1,
+    MODE_TEXTBOX,
     MODE_BUTTONS
 };
 
-enum cfg_entry_type
+enum chat_wnd_pad_mode
 {
-    ENTRY_TYPE_STRING = 1,
+    PAD_MESSAGES = 1,
+    PAD_USERLIST
+};
+
+enum entry_type
+{
+    ENTRY_TYPE_NONE = 0,
+    ENTRY_TYPE_STRING,
     ENTRY_TYPE_SHORT,
     ENTRY_TYPE_INT,
     ENTRY_TYPE_FLOAT,
@@ -149,6 +156,7 @@ struct label_t
 
 struct string_t
 {
+    int max_len;
     int str_len;
     char text[LABEL_LEN+1];
 };
@@ -161,6 +169,7 @@ struct note_labels_t
     struct label_t join_srv;
     struct label_t create_srv;
     struct label_t prefs_wnd;
+    struct label_t chat_wnd;
 };
 
 struct elem_wnd_t
@@ -189,12 +198,30 @@ struct entry_t
     void *value_ptr;
     int ptr_size;
     int selection;
-    // int str_len;
     union
     {
         struct list_t value_list;
         struct string_t value_str;
     };
+};
+
+struct textbox_t
+{
+    char *str;
+    int max_len;
+    int str_len;
+    int str_index;
+    int lines;
+    int *cols;
+    int y;
+    int x;
+};
+
+struct cursor_t
+{
+    int y;
+    int x;
+    bool is_set;
 };
 
 struct global_dims_t
@@ -401,15 +428,7 @@ struct create_wnd_t
     WINDOW *srv_info_sw;
     WINDOW *pad_border;
     WINDOW *pad;
-    // struct elem_wnd_t pad_elems[7];
     struct entry_t entries[7];
-    // WINDOW *sname_w;
-    // WINDOW *musers_w;
-    // WINDOW *rusers_w;
-    // WINDOW *addr_w;
-    // WINDOW *port_w;
-    // WINDOW *lcl_addr_w;
-    // WINDOW *auto_port_w;
     WINDOW *btns_border;
     struct elem_wnd_t btns[3];
     struct server_info_t server;
@@ -448,6 +467,7 @@ struct cfg_axis_t
     int pad_xe;
     int entries_y[4];
     int entries_x[4];
+    int labels_x[7];
     int fields_x[4];
     int v_delim_x;
 };
@@ -458,6 +478,49 @@ struct cfg_wnd_t
     WINDOW *pad;
     struct entry_t entries[4];
     int line;
+};
+
+struct chat_dims_t
+{
+    int msg_h;
+    int msg_w;
+    int usrs_h;
+    int usrs_w;
+    int tb_h;
+    int tb_w;
+    int vis_pad_h[3];
+    int vis_pad_w[3];
+    int pad_h[3];
+    int pad_w[3];
+};
+
+struct chat_axis_t
+{
+    int msg_y;
+    int msg_x;
+    int usrs_y;
+    int usrs_x;
+    int tb_y;
+    int tb_x;
+    int vis_pad_ys[3];
+    int vis_pad_xs[3];
+    int vis_pad_ye[3];
+    int vis_pad_xe[3];
+    int pad_ys[3];
+    int pad_xs[3];
+    int pad_ye[3];
+    int pad_xe[3];
+};
+
+struct chat_wnd_t
+{
+    WINDOW *pad_borders[3];
+    WINDOW *pads[3];
+    char *server_name;
+    int mode;
+    int pad_n;
+    int line[2];
+    struct textbox_t tb;
 };
 
 extern int connection_flag;
@@ -474,9 +537,11 @@ int popup_wnd(char *, int, ...);
 
 int menu_wnd(int *);
 
-int join_srv_wnd(int *);
-int create_srv_wnd(int *);
+int join_srv_wnd(int *, char *);
+int create_srv_wnd(int *, char *);
 
-int prefs_wnd(int *);
+int cfg_wnd(int *);
+
+int chat_wnd(int *, char *);
 
 #endif // _GRAPHICS_H

@@ -16,7 +16,7 @@
 
 #include <unistd.h>
 
-#define NAME_LEN                        20
+#define STR_LEN                         20
 #define IP_ADDR_LEN                     15
 
 #define LANGUAGE_ENGLISH    "en"
@@ -61,7 +61,7 @@ enum
 struct config_t
 {
     int id;
-    char name[NAME_LEN+1];
+    char name[STR_LEN+1];
     int language;
     char ip[IP_ADDR_LEN+1];
     unsigned short port;

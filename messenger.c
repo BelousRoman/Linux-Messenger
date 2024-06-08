@@ -126,9 +126,11 @@ int main(void)
     struct mq_attr attr;
     struct sigevent sev;
     int option = WND_MAIN_MENU;
+    char server_name[STR_LEN+1];
     int run_flag = 1;
     int ret = EXIT_SUCCESS;
     // init_graphics();
+    // chat_wnd(&option, "Test chat lalalalala");
     // menu_wnd(&option);
     // option = 1;
     // join_srv_wnd(&option);
@@ -203,19 +205,21 @@ int main(void)
                 break;
             case WND_JOIN_SRV:
                 // if (connection_flag == STATUS_CONNECTED)
-                    ret = join_srv_wnd(&option);
+                    ret = join_srv_wnd(&option, server_name);
                 // else
                 //     popup_wnd("Not connected", POPUP_W_WAIT);
                 break;
             case WND_CREATE_SRV:
                 // if (connection_flag == STATUS_CONNECTED)
-                    ret = create_srv_wnd(&option);
+                    ret = create_srv_wnd(&option, server_name);
                 // else
                 //     popup_wnd("Not connected", POPUP_W_WAIT);
                 break;
             case WND_PREFS:
-                ret = prefs_wnd(&option);
+                ret = cfg_wnd(&option);
                 break;
+            case WND_CHAT:
+                ret = chat_wnd(&option, server_name);
             default:
                 break;
         }

@@ -75,7 +75,7 @@ void *_processing_server_thread(void *args)
     int thread_id = (int)args;
     int client_type = TYPE_NONE;
     int client_id = 0;
-    char client_name[NAME_LEN+1];
+    char client_name[STR_LEN+1];
 
     int sem_value;
     int ret = 0;
@@ -186,18 +186,18 @@ void *_processing_server_thread(void *args)
                                 {
                                     client_id = msg.client_info.id;
                                 }
-                                if (strncmp(msg.client_info.client_name, DEFAULT_NAME, NAME_LEN) == 0)
+                                if (strncmp(msg.client_info.client_name, DEFAULT_NAME, STR_LEN) == 0)
                                 {
-                                    // strncpy(client_name, "NewUser", NAME_LEN);
-                                    snprintf(client_name, NAME_LEN, "User%d", client_id);
+                                    // strncpy(client_name, "NewUser", STR_LEN);
+                                    snprintf(client_name, STR_LEN, "User%d", client_id);
                                 }
                                 else
                                 {
-                                    strncpy(client_name, msg.client_info.client_name, NAME_LEN);
+                                    strncpy(client_name, msg.client_info.client_name, STR_LEN);
                                 }
 
                                 msg.command.status = STATUS_ANSWER;
-                                strncpy(msg.client_info.client_name, client_name, NAME_LEN);
+                                strncpy(msg.client_info.client_name, client_name, STR_LEN);
                                 msg.client_info.id = client_id;
                                 msg.client_info.client_type = client_type;
                                 msg.client_info.cur_server = 0;
@@ -225,7 +225,7 @@ void *_processing_server_thread(void *args)
                             {
                                 printf("User %s #%d requested rename operation to <%s>\n", client_name, msg.client_info.id, msg.client_info.client_name);
 
-                                strncpy(client_name, msg.client_info.client_name, NAME_LEN);
+                                strncpy(client_name, msg.client_info.client_name, STR_LEN);
                                 msg.command.status = STATUS_ANSWER;
 
                                 if (send(pfd.fd, &msg, sizeof(msg), 0) == -1)
