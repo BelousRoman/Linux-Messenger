@@ -18,6 +18,7 @@
 
 #define STR_LEN                         20
 #define IP_ADDR_LEN                     15
+#define PORT_LEN                        5
 
 #define LANGUAGE_ENGLISH    "en"
 #define LANGUAGE_RUSSIAN    "ru"

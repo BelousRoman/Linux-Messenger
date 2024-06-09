@@ -29,7 +29,7 @@
 
 #define NET_RECV_RETRY_PAUSE_SEC        0
 #define NET_RECV_RETRY_PAUSE_NSEC       10000000
-#define NET_RECV_RETRIES                5
+#define NET_RECV_RETRIES                1
 
 enum connection_status
 {

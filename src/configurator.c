@@ -89,7 +89,7 @@ int read_config()
             {
                 config.language = LANG_EN;
             }
-            else if (strncmp(LANGUAGE_RUSSIAN, language->valuestring, sizeof(LANGUAGE_ENGLISH)) == 0)
+            else if (strncmp(LANGUAGE_RUSSIAN, language->valuestring, sizeof(LANGUAGE_RUSSIAN)) == 0)
             {
                 config.language = LANG_RU;
             }
@@ -284,12 +284,13 @@ int modify_config_entry(__uint8_t entry, void *var)
         ret += AddOrModifyEntry("id", TYPE_INT, config.id);
         break;
     case ENTRY_LANGUAGE:
-        if (LANG_EN == (int *)var)
+        int tmp = *(int *)var;
+        if (LANG_EN == tmp)
         {
             config.language = LANG_EN;
             ret += AddOrModifyEntry("language", TYPE_STRING, LANGUAGE_ENGLISH);
         }
-        else if (LANG_RU == (int *)var)
+        else if (LANG_RU == tmp)
         {
             config.language = LANG_RU;
             ret += AddOrModifyEntry("language", TYPE_STRING, LANGUAGE_RUSSIAN);

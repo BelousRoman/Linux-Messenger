@@ -73,11 +73,17 @@
 #define JOIN_SCR_NOTE                   "TAB: Change mode\tF1: Info\tF3: Back\tF4: Quit"
 
 #define CREATE_SCR_LABEL                "Create server"
-#define CREATE_SCR_SRV_INFO_TEMPLATE    "Server properties:\n* Server name:\t\t%s\n* Maximum users:\t%s\n* Address:\t\t%s:%d"
+#define CREATE_SCR_SINFO_LABEL          "Server properties:\n"
+#define CREATE_SCR_SINFO_SNAME          "* Server name:\t\t%s\n"
+#define CREATE_SCR_SINFO_MUSERS         "* Maximum users:\t%s\n"
+#define CREATE_SCR_SINFO_IP             "* IP:\t\t\t%s\n"
+#define CREATE_SCR_SINFO_PORT           "* Port:\t\t\t%s"
 #define CREATE_SCR_NO_RESTR_LABEL       "Not restricted"
+#define CREATE_SCR_LOCAL_IP_LABEL       "127.0.0.1"
+#define CREATE_SCR_AUTO_PORT_LABEL      "Auto"
 #define CREATE_SCR_SRV_NAME_LABEL       "Server name"
 #define CREATE_SCR_CONN_USERS_LABEL     "Maximum users"
-#define CREATE_SCR_RESTR_USERS_LABEL    "Users restriction"
+#define CREATE_SCR_RESTR_USERS_LABEL    "Don't restrict users"
 #define CREATE_SCR_SRV_ADDR_LABEL       "Address"
 #define CREATE_SCR_SRV_PORT_LABEL       "Port"
 #define CREATE_SCR_LCL_ADDR_LABEL       "Local address"
@@ -137,15 +143,16 @@ enum chat_wnd_pad_mode
     PAD_USERLIST
 };
 
-enum entry_type
+enum field_type
 {
-    ENTRY_TYPE_NONE = 0,
-    ENTRY_TYPE_STRING,
-    ENTRY_TYPE_SHORT,
-    ENTRY_TYPE_INT,
-    ENTRY_TYPE_FLOAT,
-    ENTRY_TYPE_OPTION,
-    ENTRY_TYPE_IP
+    FIELD_TYPE_NONE = 0,
+    FIELD_TYPE_STRING,
+    FIELD_TYPE_SHORT,
+    FIELD_TYPE_INT,
+    FIELD_TYPE_FLOAT,
+    FIELD_TYPE_OPTION,
+    FIELD_TYPE_IP,
+    FIELD_TYPE_ADDR
 };
 
 struct label_t
@@ -191,7 +198,7 @@ struct list_t
     struct option_t *options;
 };
 
-struct entry_t
+struct field_t
 {
     struct elem_wnd_t elem;
     int type;
@@ -364,10 +371,14 @@ struct join_wnd_t
     WINDOW *servers_pad;
     WINDOW *caddr_w;
     WINDOW *label_w;
-    WINDOW *tb_w;
+    struct field_t tb_w;
     WINDOW *btns_border;
     struct elem_wnd_t btns[3];
     struct server_info_t *servers;
+    char address[IP_ADDR_LEN+PORT_LEN+2]; // 127.127.127.127:25017
+    char ip[IP_ADDR_LEN+1];
+    char port[PORT_LEN+1];
+    int column_index;
     int servers_count;
     int line;
     // int vis_line;
@@ -428,11 +439,11 @@ struct create_wnd_t
     WINDOW *srv_info_sw;
     WINDOW *pad_border;
     WINDOW *pad;
-    struct entry_t entries[7];
+    struct field_t fields[7];
     WINDOW *btns_border;
     struct elem_wnd_t btns[3];
     struct server_info_t server;
-    int usr_restrict_flag;
+    int usr_no_restr_flag;
     int local_srv_flag;
     int auto_port_flag;
     int line;
@@ -476,8 +487,9 @@ struct cfg_wnd_t
 {
     WINDOW *pad_border;
     WINDOW *pad;
-    struct entry_t entries[4];
+    struct field_t fields[4];
     int line;
+    struct config_t config;
 };
 
 struct chat_dims_t

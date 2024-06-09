@@ -243,6 +243,12 @@ int _remove_char_at(char *str, int len, int pos)
     int index;
     int ret = EXIT_SUCCESS;
 
+    if (len == pos)
+    {
+        str[index] = 0;
+        return ret;
+    }
+
     for (index = pos; index < len-1; ++index)
     {
         str[index] = str[index+1];
@@ -353,7 +359,7 @@ int _set_dimensions()
         create_dims.entry_w = LABEL_LEN*2+global_dims.h_spacer*4+3;
 
         create_dims.srv_info_h = global_dims.wnd_h - 2 - (GFX_ELEM_VOFF*2);
-        create_dims.srv_info_sw_h = 4;
+        create_dims.srv_info_sw_h = 5;
 
         create_dims.pad_h = (create_dims.entry_h*7) + 6;
         create_dims.pad_w = create_dims.entry_w;
@@ -878,6 +884,13 @@ int _draw_window(int wnd_type)
             {
                 if (cur_wnd == WND_NONE)
                 {
+                    join_srv.tb_w.type = FIELD_TYPE_ADDR;
+                    join_srv.tb_w.value_ptr = (void *)&join_srv.address;
+                    join_srv.tb_w.ptr_size = sizeof(join_srv.address);
+                    join_srv.tb_w.value_str.max_len = join_srv.tb_w.ptr_size;
+                    join_srv.tb_w.value_str.str_len = 0;
+                    join_srv.tb_w.selection = join_srv.tb_w.value_str.str_len;
+
                     _set_string(&join_srv.btns[0].lbl, JOIN_SCR_JOIN_BTN_LABEL);
                     _set_string(&join_srv.btns[1].lbl, JOIN_SCR_REFRESH_BTN_LABEL);
                     _set_string(&join_srv.btns[2].lbl, JOIN_SCR_CLEAR_BTN_LABEL);
@@ -895,7 +908,7 @@ int _draw_window(int wnd_type)
                 join_srv.susers_w = derwin(join_srv.top_panel, join_dims.susers_h, join_dims.susers_w, join_axis.susers_y, join_axis.susers_x);
                 join_srv.servers_pad = newpad(join_dims.pad_h, join_dims.pad_w);
                 join_srv.label_w = derwin(join_srv.caddr_w, join_dims.lbl_h, join_dims.lbl_w, join_axis.lbl_y, join_axis.lbl_x);
-                join_srv.tb_w = derwin(join_srv.caddr_w, join_dims.tb_h, join_dims.tb_w, join_axis.tb_y, join_axis.tb_x);
+                join_srv.tb_w.elem.wnd = derwin(join_srv.caddr_w, join_dims.tb_h, join_dims.tb_w, join_axis.tb_y, join_axis.tb_x);
                 join_srv.btns[0].wnd = derwin(join_srv.btns_border, join_dims.btns_h, join_dims.btns_w, join_axis.btns_y[0], join_axis.btns_x[0]);
                 join_srv.btns[1].wnd = derwin(join_srv.btns_border, join_dims.btns_h, join_dims.btns_w, join_axis.btns_y[1], join_axis.btns_x[1]);
                 join_srv.btns[2].wnd = derwin(join_srv.btns_border, join_dims.btns_h, join_dims.btns_w, join_axis.btns_y[2], join_axis.btns_x[2]);
@@ -909,22 +922,6 @@ int _draw_window(int wnd_type)
                 box(join_srv.caddr_w, ACS_VLINE, ACS_HLINE);
                 box(join_srv.btns_border, ACS_VLINE, ACS_HLINE);
                 box(global_wnds.note_w, ' ', ' ');
-
-                mvwprintw(global_wnds.wnd, 0, (global_dims.wnd_w-strlen(JOIN_SCR_LABEL))/2, JOIN_SCR_LABEL);
-                wprintw(join_srv.sname_w, JOIN_SCR_SRV_NAME_LABEL);
-                wprintw(join_srv.saddr_w, JOIN_SCR_SRV_ADDR_LABEL);
-                wprintw(join_srv.susers_w, JOIN_SCR_CONN_USERS_LABEL);
-                wprintw(join_srv.label_w, JOIN_SCR_MAN_ADDR_LABEL);
-                for (index = 0; index < 3; ++index)
-                {
-                    mvwprintw(join_srv.btns[index].wnd, 0, (join_dims.btns_w-join_srv.btns[index].lbl.size)/2, join_srv.btns[index].lbl.text);
-                }
-
-                wattron(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                mvwprintw(join_srv.btns[join_srv.selection].wnd, 0, (join_dims.btns_w-join_srv.btns[join_srv.selection].lbl.size)/2, join_srv.btns[join_srv.selection].lbl.text);
-                wattroff(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-
-                mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.join_srv.size)/2), note_labels.join_srv.text);
 
                 mvwaddch(join_srv.top_panel, 0, join_axis.saddr_x-1, ACS_BSSS);
                 mvwaddch(join_srv.top_panel, 0, join_axis.susers_x-1, ACS_BSSS);
@@ -945,33 +942,8 @@ int _draw_window(int wnd_type)
                 mvwaddch(join_srv.btns_border, 0, join_axis.btns_x[2]-1, ACS_BSSS);
                 mvwaddch(join_srv.btns_border, 0, 0, ACS_BSSS);
 
-
                 mvwvline(join_srv.pad_border, 1, join_axis.saddr_x-1, ACS_VLINE, join_dims.pad_border_h-2);
                 mvwvline(join_srv.pad_border, 1, join_axis.susers_x-1, ACS_VLINE, join_dims.pad_border_h-2);
-                
-                for (index = 0; index < sizeof(servers_info)/sizeof(struct server_info_t); index++)
-                {
-                    mvwhline(join_srv.servers_pad, index, 0, ' ', join_dims.pad_w);
-                    mvwprintw(join_srv.servers_pad, index, 0, "%s", servers_info[index].server_name);
-                    mvwprintw(join_srv.servers_pad, index, join_axis.saddr_x-1, "%s:%d", servers_info[index].ip, servers_info[index].port);
-                    if (servers_info[index].max_users != 0)
-                        mvwprintw(join_srv.servers_pad, index, join_axis.susers_x-1, "%d/%d", servers_info[index].cur_users, servers_info[index].max_users);
-                    else
-                        mvwprintw(join_srv.servers_pad, index, join_axis.susers_x-1, "%d", servers_info[index].cur_users);
-                    mvwaddch(join_srv.servers_pad, index, join_axis.saddr_x-2, ACS_VLINE);
-                    mvwaddch(join_srv.servers_pad, index, join_axis.susers_x-2, ACS_VLINE);
-                }
-                wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
-                mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
-                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
-                if (servers_info[join_srv.line].max_users != 0)
-                    mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
-                else
-                    mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
-                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
-                mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
-                wattroff(join_srv.servers_pad, COLOR_PAIR(2));
 
                 tmp_int = join_axis.pad_border_x+join_axis.saddr_x-1;
                 if (tmp_int == join_axis.caddr_x+join_dims.caddr_w-1)
@@ -980,7 +952,6 @@ int _draw_window(int wnd_type)
                 }
                 else
                 {
-                    
                     if (tmp_int == join_axis.btns_border_x)
                     {
                         mvwaddch(join_srv.pad_border, join_dims.pad_border_h-1, join_axis.saddr_x-1, ACS_PLUS);
@@ -1028,125 +999,187 @@ int _draw_window(int wnd_type)
                 }
                 mvwaddch(join_srv.btns_border, join_dims.btns_border_h-1, join_axis.btns_x[1]-1, ACS_BTEE);
                 mvwaddch(join_srv.btns_border, join_dims.btns_border_h-1, join_axis.btns_x[2]-1, ACS_BTEE);
+
+                mvwprintw(global_wnds.wnd, 0, (global_dims.wnd_w-strlen(JOIN_SCR_LABEL))/2, JOIN_SCR_LABEL);
+                mvwprintw(join_srv.sname_w, 0, 0, "%s", JOIN_SCR_SRV_NAME_LABEL);
+                mvwprintw(join_srv.saddr_w, 0, 0, "%s", JOIN_SCR_SRV_ADDR_LABEL);
+                mvwprintw(join_srv.susers_w, 0, 0, "%s", JOIN_SCR_CONN_USERS_LABEL);
+                mvwprintw(join_srv.label_w, 0, 0, "%s", JOIN_SCR_MAN_ADDR_LABEL);
+
+                for (index = 0; index < sizeof(servers_info)/sizeof(struct server_info_t); index++)
+                {
+                    mvwhline(join_srv.servers_pad, index, 0, ' ', join_dims.pad_w);
+                    mvwprintw(join_srv.servers_pad, index, 0, "%s", servers_info[index].server_name);
+                    mvwprintw(join_srv.servers_pad, index, join_axis.saddr_x-1, "%s:%d", servers_info[index].ip, servers_info[index].port);
+                    if (servers_info[index].max_users != 0)
+                        mvwprintw(join_srv.servers_pad, index, join_axis.susers_x-1, "%d/%d", servers_info[index].cur_users, servers_info[index].max_users);
+                    else
+                        mvwprintw(join_srv.servers_pad, index, join_axis.susers_x-1, "%d", servers_info[index].cur_users);
+                    mvwaddch(join_srv.servers_pad, index, join_axis.saddr_x-2, ACS_VLINE);
+                    mvwaddch(join_srv.servers_pad, index, join_axis.susers_x-2, ACS_VLINE);
+                }
+
+                mvwprintw(join_srv.tb_w.elem.wnd, 0, 0, "%s", join_srv.tb_w.value_str.text);
+
+                switch (join_srv.mode)
+                {
+                    case MODE_PAD:
+                    {
+                        wattron(join_srv.servers_pad, COLOR_PAIR(2));
+                        mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
+                        if (servers_info[join_srv.line].max_users != 0)
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
+                        else
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
+                        wattroff(join_srv.servers_pad, COLOR_PAIR(2));
+
+                        wattron(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                    }
+                        break;
+                    case MODE_TEXTBOX:
+                    {
+                        cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
+                        cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x+join_srv.tb_w.selection;
+                        cursor.is_set = true;
+
+                        move(cursor.y, cursor.x);
+                        curs_set(1);
+                    }
+                        break;
+                    default:
+                        break;
+                }
+
+                for (index = 0; index < sizeof(join_srv.btns)/sizeof(struct elem_wnd_t); ++index)
+                {
+                    mvwprintw(join_srv.btns[index].wnd, 0, (join_dims.btns_w-join_srv.btns[index].lbl.size)/2, join_srv.btns[index].lbl.text);
+                }
+                wattroff(join_srv.btns[join_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+
+                mvwprintw(global_wnds.note_sw, 0, (((global_dims.note_w-2)-note_labels.join_srv.size)/2), note_labels.join_srv.text);
             }
             break;
         case WND_CREATE_SRV:
             {
                 if (cur_wnd == WND_NONE)
                 {
-                    for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
-                        memset((char *)&create_srv.entries[index], NULL, sizeof(struct entry_t));
+                    for (index = 0; index < sizeof(create_srv.fields)/sizeof(struct field_t); ++index)
+                        memset((char *)&create_srv.fields[index], NULL, sizeof(struct field_t));
 
-                    _set_string(&create_srv.entries[0].elem.lbl, CREATE_SCR_SRV_NAME_LABEL);
-                    _set_string(&create_srv.entries[1].elem.lbl, CREATE_SCR_CONN_USERS_LABEL);
-                    _set_string(&create_srv.entries[2].elem.lbl, CREATE_SCR_RESTR_USERS_LABEL);
-                    _set_string(&create_srv.entries[3].elem.lbl, CREATE_SCR_SRV_ADDR_LABEL);
-                    _set_string(&create_srv.entries[4].elem.lbl, CREATE_SCR_SRV_PORT_LABEL);
-                    _set_string(&create_srv.entries[5].elem.lbl, CREATE_SCR_LCL_ADDR_LABEL);
-                    _set_string(&create_srv.entries[6].elem.lbl, CREATE_SCR_AUTO_PORT_LABEL);
+                    _set_string(&create_srv.fields[0].elem.lbl, CREATE_SCR_SRV_NAME_LABEL);
+                    _set_string(&create_srv.fields[1].elem.lbl, CREATE_SCR_CONN_USERS_LABEL);
+                    _set_string(&create_srv.fields[2].elem.lbl, CREATE_SCR_RESTR_USERS_LABEL);
+                    _set_string(&create_srv.fields[3].elem.lbl, CREATE_SCR_SRV_ADDR_LABEL);
+                    _set_string(&create_srv.fields[4].elem.lbl, CREATE_SCR_SRV_PORT_LABEL);
+                    _set_string(&create_srv.fields[5].elem.lbl, CREATE_SCR_LCL_ADDR_LABEL);
+                    _set_string(&create_srv.fields[6].elem.lbl, CREATE_SCR_AUTO_PORT_LABEL);
 
-                    create_srv.entries[0].type = ENTRY_TYPE_STRING;
-                    create_srv.entries[1].type = ENTRY_TYPE_SHORT;
-                    create_srv.entries[2].type = ENTRY_TYPE_OPTION;
-                    create_srv.entries[3].type = ENTRY_TYPE_IP;
-                    create_srv.entries[4].type = ENTRY_TYPE_SHORT;
-                    create_srv.entries[5].type = ENTRY_TYPE_OPTION;
-                    create_srv.entries[6].type = ENTRY_TYPE_OPTION;
+                    create_srv.fields[0].type = FIELD_TYPE_STRING;
+                    create_srv.fields[1].type = FIELD_TYPE_SHORT;
+                    create_srv.fields[2].type = FIELD_TYPE_OPTION;
+                    create_srv.fields[3].type = FIELD_TYPE_IP;
+                    create_srv.fields[4].type = FIELD_TYPE_SHORT;
+                    create_srv.fields[5].type = FIELD_TYPE_OPTION;
+                    create_srv.fields[6].type = FIELD_TYPE_OPTION;
 
                     strncpy(create_srv.server.server_name, CREATE_DEF_SRV_NAME, STR_LEN);
                     create_srv.server.max_users = CREATE_DEF_USR_RESTR;
                     strncpy(create_srv.server.ip, CREATE_DEF_SRV_IP, IP_ADDR_LEN);
                     create_srv.server.port = CREATE_DEF_SRV_PORT;
 
-                    create_srv.entries[0].value_ptr = (void *)&create_srv.server.server_name;
-                    create_srv.entries[1].value_ptr = (void *)&create_srv.server.max_users;
-                    create_srv.entries[2].value_ptr = (void *)&create_srv.usr_restrict_flag;
-                    create_srv.entries[3].value_ptr = (void *)&create_srv.server.ip;
-                    create_srv.entries[4].value_ptr = (void *)&create_srv.server.port;
-                    create_srv.entries[5].value_ptr = (void *)&create_srv.local_srv_flag;
-                    create_srv.entries[6].value_ptr = (void *)&create_srv.auto_port_flag;
+                    create_srv.fields[0].value_ptr = (void *)&create_srv.server.server_name;
+                    create_srv.fields[1].value_ptr = (void *)&create_srv.server.max_users;
+                    create_srv.fields[2].value_ptr = (void *)&create_srv.usr_no_restr_flag;
+                    create_srv.fields[3].value_ptr = (void *)&create_srv.server.ip;
+                    create_srv.fields[4].value_ptr = (void *)&create_srv.server.port;
+                    create_srv.fields[5].value_ptr = (void *)&create_srv.local_srv_flag;
+                    create_srv.fields[6].value_ptr = (void *)&create_srv.auto_port_flag;
 
-                    create_srv.entries[0].ptr_size = sizeof(create_srv.server.server_name)-1;
-                    create_srv.entries[1].ptr_size = sizeof(create_srv.server.max_users);
-                    create_srv.entries[2].ptr_size = sizeof(create_srv.usr_restrict_flag);
-                    create_srv.entries[3].ptr_size = sizeof(create_srv.server.ip)-1;
-                    create_srv.entries[4].ptr_size = sizeof(create_srv.server.port);
-                    create_srv.entries[5].ptr_size = sizeof(create_srv.local_srv_flag);
-                    create_srv.entries[6].ptr_size = sizeof(create_srv.auto_port_flag);
+                    create_srv.fields[0].ptr_size = sizeof(create_srv.server.server_name);
+                    create_srv.fields[1].ptr_size = sizeof(create_srv.server.max_users);
+                    create_srv.fields[2].ptr_size = sizeof(create_srv.usr_no_restr_flag);
+                    create_srv.fields[3].ptr_size = sizeof(create_srv.server.ip);
+                    create_srv.fields[4].ptr_size = sizeof(create_srv.server.port);
+                    create_srv.fields[5].ptr_size = sizeof(create_srv.local_srv_flag);
+                    create_srv.fields[6].ptr_size = sizeof(create_srv.auto_port_flag);
 
                     snprintf(tmp_str, STR_LEN, "%d", 0xFFFF);
 
-                    create_srv.entries[0].value_str.max_len = create_srv.entries[0].ptr_size;
-                    create_srv.entries[1].value_str.max_len =  strlen(tmp_str);
-                    create_srv.entries[3].value_str.max_len = create_srv.entries[3].ptr_size;
-                    create_srv.entries[4].value_str.max_len =  strlen(tmp_str);
+                    create_srv.fields[0].value_str.max_len = create_srv.fields[0].ptr_size;
+                    create_srv.fields[1].value_str.max_len =  strlen(tmp_str)+1;
+                    create_srv.fields[3].value_str.max_len = create_srv.fields[3].ptr_size;
+                    create_srv.fields[4].value_str.max_len =  strlen(tmp_str)+1;
 
-                    strncpy(create_srv.entries[0].value_str.text, create_srv.server.server_name, LABEL_LEN);
-                    snprintf(create_srv.entries[1].value_str.text, LABEL_LEN, "%d", create_srv.server.max_users);
-                    strncpy(create_srv.entries[3].value_str.text, create_srv.server.ip, LABEL_LEN);
-                    snprintf(create_srv.entries[4].value_str.text, LABEL_LEN, "%d", create_srv.server.port);
+                    strncpy(create_srv.fields[0].value_str.text, create_srv.server.server_name, LABEL_LEN);
+                    snprintf(create_srv.fields[1].value_str.text, LABEL_LEN, "%d", create_srv.server.max_users);
+                    strncpy(create_srv.fields[3].value_str.text, create_srv.server.ip, LABEL_LEN);
+                    snprintf(create_srv.fields[4].value_str.text, LABEL_LEN, "%d", create_srv.server.port);
 
-                    create_srv.entries[0].value_str.str_len = strlen(create_srv.entries[0].value_str.text);
-                    create_srv.entries[1].value_str.str_len = strlen(create_srv.entries[1].value_str.text);
-                    create_srv.entries[3].value_str.str_len = strlen(create_srv.entries[3].value_str.text);
-                    create_srv.entries[4].value_str.str_len = strlen(create_srv.entries[4].value_str.text);
+                    create_srv.fields[0].value_str.str_len = strlen(create_srv.fields[0].value_str.text);
+                    create_srv.fields[1].value_str.str_len = strlen(create_srv.fields[1].value_str.text);
+                    create_srv.fields[3].value_str.str_len = strlen(create_srv.fields[3].value_str.text);
+                    create_srv.fields[4].value_str.str_len = strlen(create_srv.fields[4].value_str.text);
 
-                    create_srv.entries[0].selection = create_srv.entries[0].value_str.str_len < create_srv.entries[0].value_str.max_len ? create_srv.entries[0].value_str.str_len : create_srv.entries[0].value_str.max_len-1;
-                    create_srv.entries[1].selection = create_srv.entries[1].value_str.str_len < create_srv.entries[1].value_str.max_len ? create_srv.entries[1].value_str.str_len : create_srv.entries[1].value_str.max_len-1;
-                    create_srv.entries[3].selection = create_srv.entries[3].value_str.str_len < create_srv.entries[3].value_str.max_len ? create_srv.entries[3].value_str.str_len : create_srv.entries[3].value_str.max_len-1;
-                    create_srv.entries[4].selection = create_srv.entries[4].value_str.str_len < create_srv.entries[4].value_str.max_len ? create_srv.entries[4].value_str.str_len : create_srv.entries[4].value_str.max_len-1;
+                    create_srv.fields[0].selection = create_srv.fields[0].value_str.str_len < create_srv.fields[0].value_str.max_len ? create_srv.fields[0].value_str.str_len : create_srv.fields[0].value_str.max_len-1;
+                    create_srv.fields[1].selection = create_srv.fields[1].value_str.str_len < create_srv.fields[1].value_str.max_len ? create_srv.fields[1].value_str.str_len : create_srv.fields[1].value_str.max_len-1;
+                    create_srv.fields[3].selection = create_srv.fields[3].value_str.str_len < create_srv.fields[3].value_str.max_len ? create_srv.fields[3].value_str.str_len : create_srv.fields[3].value_str.max_len-1;
+                    create_srv.fields[4].selection = create_srv.fields[4].value_str.str_len < create_srv.fields[4].value_str.max_len ? create_srv.fields[4].value_str.str_len : create_srv.fields[4].value_str.max_len-1;
 
-                    create_srv.entries[2].value_list.size = 2;
-                    create_srv.entries[2].value_list.options = malloc(create_srv.entries[2].value_list.size*sizeof(struct option_t));
-                    if (create_srv.entries[2].value_list.options != NULL)
+                    create_srv.fields[2].value_list.size = 2;
+                    create_srv.fields[2].value_list.options = malloc(create_srv.fields[2].value_list.size*sizeof(struct option_t));
+                    if (create_srv.fields[2].value_list.options != NULL)
                     {
-                        strcpy(create_srv.entries[2].value_list.options[0].option, OPTIONS_FALSE_LABEL);
-                        strcpy(create_srv.entries[2].value_list.options[1].option, OPTIONS_TRUE_LABEL);
+                        strcpy(create_srv.fields[2].value_list.options[0].option, OPTIONS_FALSE_LABEL);
+                        strcpy(create_srv.fields[2].value_list.options[1].option, OPTIONS_TRUE_LABEL);
 
-                        create_srv.entries[2].value_list.options[0].value = false;
-                        create_srv.entries[2].value_list.options[1].value = true;
+                        create_srv.fields[2].value_list.options[0].value = false;
+                        create_srv.fields[2].value_list.options[1].value = true;
 
-                        for(index = 0; index < create_srv.entries[2].value_list.size; ++index)
+                        for(index = 0; index < create_srv.fields[2].value_list.size; ++index)
                         {
-                            create_srv.entries[2].value_list.options[index].str_len = strlen(create_srv.entries[2].value_list.options[index].option);
-                            if (create_srv.usr_restrict_flag == create_srv.entries[2].value_list.options[index].value)
-                                create_srv.entries[2].selection = index;
+                            create_srv.fields[2].value_list.options[index].str_len = strlen(create_srv.fields[2].value_list.options[index].option);
+                            if (create_srv.usr_no_restr_flag == create_srv.fields[2].value_list.options[index].value)
+                                create_srv.fields[2].selection = index;
                         }
                     }
 
-                    create_srv.entries[5].value_list.size = 2;
-                    create_srv.entries[5].value_list.options = malloc(create_srv.entries[5].value_list.size*sizeof(struct option_t));
-                    if (create_srv.entries[5].value_list.options != NULL)
+                    create_srv.fields[5].value_list.size = 2;
+                    create_srv.fields[5].value_list.options = malloc(create_srv.fields[5].value_list.size*sizeof(struct option_t));
+                    if (create_srv.fields[5].value_list.options != NULL)
                     {
-                        strcpy(create_srv.entries[5].value_list.options[0].option, OPTIONS_FALSE_LABEL);
-                        strcpy(create_srv.entries[5].value_list.options[1].option, OPTIONS_TRUE_LABEL);
+                        strcpy(create_srv.fields[5].value_list.options[0].option, OPTIONS_FALSE_LABEL);
+                        strcpy(create_srv.fields[5].value_list.options[1].option, OPTIONS_TRUE_LABEL);
 
-                        create_srv.entries[5].value_list.options[0].value = false;
-                        create_srv.entries[5].value_list.options[1].value = true;
+                        create_srv.fields[5].value_list.options[0].value = false;
+                        create_srv.fields[5].value_list.options[1].value = true;
 
-                        for(index = 0; index < create_srv.entries[5].value_list.size; ++index)
+                        for(index = 0; index < create_srv.fields[5].value_list.size; ++index)
                         {
-                            create_srv.entries[5].value_list.options[index].str_len = strlen(create_srv.entries[5].value_list.options[index].option);
-                            if (create_srv.usr_restrict_flag == create_srv.entries[5].value_list.options[index].value)
-                                create_srv.entries[5].selection = index;
+                            create_srv.fields[5].value_list.options[index].str_len = strlen(create_srv.fields[5].value_list.options[index].option);
+                            if (create_srv.usr_no_restr_flag == create_srv.fields[5].value_list.options[index].value)
+                                create_srv.fields[5].selection = index;
                         }
                     }
 
-                    create_srv.entries[6].value_list.size = 2;
-                    create_srv.entries[6].value_list.options = malloc(create_srv.entries[6].value_list.size*sizeof(struct option_t));
-                    if (create_srv.entries[6].value_list.options != NULL)
+                    create_srv.fields[6].value_list.size = 2;
+                    create_srv.fields[6].value_list.options = malloc(create_srv.fields[6].value_list.size*sizeof(struct option_t));
+                    if (create_srv.fields[6].value_list.options != NULL)
                     {
-                        strcpy(create_srv.entries[6].value_list.options[0].option, OPTIONS_FALSE_LABEL);
-                        strcpy(create_srv.entries[6].value_list.options[1].option, OPTIONS_TRUE_LABEL);
+                        strcpy(create_srv.fields[6].value_list.options[0].option, OPTIONS_FALSE_LABEL);
+                        strcpy(create_srv.fields[6].value_list.options[1].option, OPTIONS_TRUE_LABEL);
 
-                        create_srv.entries[6].value_list.options[0].value = false;
-                        create_srv.entries[6].value_list.options[1].value = true;
+                        create_srv.fields[6].value_list.options[0].value = false;
+                        create_srv.fields[6].value_list.options[1].value = true;
 
-                        for(index = 0; index < create_srv.entries[6].value_list.size; ++index)
+                        for(index = 0; index < create_srv.fields[6].value_list.size; ++index)
                         {
-                            create_srv.entries[6].value_list.options[index].str_len = strlen(create_srv.entries[6].value_list.options[index].option);
-                            if (create_srv.usr_restrict_flag == create_srv.entries[6].value_list.options[index].value)
-                                create_srv.entries[6].selection = index;
+                            create_srv.fields[6].value_list.options[index].str_len = strlen(create_srv.fields[6].value_list.options[index].option);
+                            if (create_srv.usr_no_restr_flag == create_srv.fields[6].value_list.options[index].value)
+                                create_srv.fields[6].selection = index;
                         }
                     }
 
@@ -1170,7 +1203,7 @@ int _draw_window(int wnd_type)
                 }
 
                 for (index = 0; index < 7; ++index)
-                    create_srv.entries[index].elem.wnd = subpad(create_srv.pad, create_dims.entry_h, create_dims.entry_w, create_axis.entries_y[index], create_axis.entries_x[index]);
+                    create_srv.fields[index].elem.wnd = subpad(create_srv.pad, create_dims.entry_h, create_dims.entry_w, create_axis.entries_y[index], create_axis.entries_x[index]);
 
                 global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
                 global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
@@ -1183,28 +1216,41 @@ int _draw_window(int wnd_type)
 
                 mvwprintw(global_wnds.wnd, 0, ((global_dims.wnd_w-strlen(CREATE_SCR_LABEL))/2), CREATE_SCR_LABEL);
 
-                wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, create_srv.entries[1].value_str.text, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_LABEL""CREATE_SCR_SINFO_SNAME, create_srv.fields[0].value_str.text);
+                if (*((int *)create_srv.fields[2].value_ptr) == true)
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, CREATE_SCR_NO_RESTR_LABEL);
+                else
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, create_srv.fields[1].value_str.text);
+                
+                if (*((int *)create_srv.fields[5].value_ptr) == true)
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, CREATE_SCR_LOCAL_IP_LABEL);
+                else
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, create_srv.fields[3].value_str.text);
+                if (*((int *)create_srv.fields[6].value_ptr) == true)
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, CREATE_SCR_AUTO_PORT_LABEL);
+                else
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, create_srv.fields[4].value_str.text);
 
                 for (index = 0; index < 7; ++index)
                 {
-                    mvwprintw(create_srv.entries[index].elem.wnd, 0, create_axis.labels_x[index], create_srv.entries[index].elem.lbl.text);
-                    mvwaddch(create_srv.entries[index].elem.wnd, 0, create_axis.v_delim_x, ACS_VLINE);
-                    switch (create_srv.entries[index].type)
+                    mvwprintw(create_srv.fields[index].elem.wnd, 0, create_axis.labels_x[index], create_srv.fields[index].elem.lbl.text);
+                    mvwaddch(create_srv.fields[index].elem.wnd, 0, create_axis.v_delim_x, ACS_VLINE);
+                    switch (create_srv.fields[index].type)
                     {
-                    case ENTRY_TYPE_STRING:
-                    case ENTRY_TYPE_SHORT:
-                    case ENTRY_TYPE_INT:
-                    case ENTRY_TYPE_FLOAT:
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_STRING:
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
+                    case FIELD_TYPE_FLOAT:
+                    case FIELD_TYPE_IP:
                     {
-                        mvwprintw(create_srv.entries[index].elem.wnd, 0, create_axis.fields_x[index], create_srv.entries[index].value_str.text);
+                        mvwprintw(create_srv.fields[index].elem.wnd, 0, create_axis.fields_x[index], create_srv.fields[index].value_str.text);
                     }
                         break;
-                    case ENTRY_TYPE_OPTION:
+                    case FIELD_TYPE_OPTION:
                     {
-                        mvwaddch(create_srv.entries[index].elem.wnd, 0, create_axis.fields_x[index]-1, '<');
-                        mvwprintw(create_srv.entries[index].elem.wnd, 0, create_axis.fields_x[index]+((LABEL_LEN-create_srv.entries[index].value_list.options[create_srv.entries[index].selection].str_len)/2), "%s", create_srv.entries[index].value_list.options[create_srv.entries[index].selection].option);
-                        mvwaddch(create_srv.entries[index].elem.wnd, 0, create_axis.fields_x[index]+LABEL_LEN, '>');
+                        mvwaddch(create_srv.fields[index].elem.wnd, 0, create_axis.fields_x[index]-1, '<');
+                        mvwprintw(create_srv.fields[index].elem.wnd, 0, create_axis.fields_x[index]+((LABEL_LEN-create_srv.fields[index].value_list.options[create_srv.fields[index].selection].str_len)/2), "%s", create_srv.fields[index].value_list.options[create_srv.fields[index].selection].option);
+                        mvwaddch(create_srv.fields[index].elem.wnd, 0, create_axis.fields_x[index]+LABEL_LEN, '>');
                     }
                         break;
                     default:
@@ -1220,36 +1266,35 @@ int _draw_window(int wnd_type)
                 switch (create_srv.mode)
                 {
                     case MODE_PAD:
-                        wattron(create_srv.entries[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.entries[create_srv.line].elem.lbl.text);
-                        wattroff(create_srv.entries[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.v_delim_x, ACS_VLINE);
-                        switch (create_srv.entries[create_srv.line].type)
+                        wattron(create_srv.fields[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.fields[create_srv.line].elem.lbl.text);
+                        wattroff(create_srv.fields[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.v_delim_x, ACS_VLINE);
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
                         {
                             cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
                             cursor.is_set = true;
 
-                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             move(cursor.y, cursor.x);
                             curs_set(1);
                         }
                             break;
-                        case ENTRY_TYPE_OPTION:
+                        case FIELD_TYPE_OPTION:
                         {
                             cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
                         }
                             
                             break;
@@ -1299,57 +1344,63 @@ int _draw_window(int wnd_type)
         {
             if (cur_wnd == WND_NONE)
             {
-                _set_string(&cfg_wnds.entries[0].elem.lbl, PREFS_USERNAME_LABEL);
-                _set_string(&cfg_wnds.entries[1].elem.lbl, PREFS_LANG_LABEL);
-                _set_string(&cfg_wnds.entries[2].elem.lbl, PREFS_IP_LABEL);
-                _set_string(&cfg_wnds.entries[3].elem.lbl, PREFS_PORT_LABEL);
+                _set_string(&cfg_wnds.fields[0].elem.lbl, PREFS_USERNAME_LABEL);
+                _set_string(&cfg_wnds.fields[1].elem.lbl, PREFS_LANG_LABEL);
+                _set_string(&cfg_wnds.fields[2].elem.lbl, PREFS_IP_LABEL);
+                _set_string(&cfg_wnds.fields[3].elem.lbl, PREFS_PORT_LABEL);
 
-                cfg_wnds.entries[0].type = ENTRY_TYPE_STRING;
-                cfg_wnds.entries[1].type = ENTRY_TYPE_OPTION;
-                cfg_wnds.entries[2].type = ENTRY_TYPE_IP;
-                cfg_wnds.entries[3].type = ENTRY_TYPE_SHORT;
+                cfg_wnds.fields[0].type = FIELD_TYPE_STRING;
+                cfg_wnds.fields[1].type = FIELD_TYPE_OPTION;
+                cfg_wnds.fields[2].type = FIELD_TYPE_IP;
+                cfg_wnds.fields[3].type = FIELD_TYPE_SHORT;
 
-                cfg_wnds.entries[0].value_ptr = (void *)&config.name;
-                cfg_wnds.entries[1].value_ptr = (void *)&config.language;
-                cfg_wnds.entries[2].value_ptr = (void *)&config.ip;
-                cfg_wnds.entries[3].value_ptr = (void *)&config.port;
+                cfg_wnds.fields[0].value_ptr = (void *)&cfg_wnds.config.name;
+                cfg_wnds.fields[1].value_ptr = (void *)&cfg_wnds.config.language;
+                cfg_wnds.fields[2].value_ptr = (void *)&cfg_wnds.config.ip;
+                cfg_wnds.fields[3].value_ptr = (void *)&cfg_wnds.config.port;
 
-                cfg_wnds.entries[0].ptr_size = sizeof(config.name)-1;
-                cfg_wnds.entries[1].ptr_size = sizeof(config.language);
-                cfg_wnds.entries[2].ptr_size = sizeof(config.ip)-1;
-                cfg_wnds.entries[3].ptr_size = sizeof(config.port);
+                cfg_wnds.fields[0].ptr_size = sizeof(config.name);
+                cfg_wnds.fields[1].ptr_size = sizeof(config.language);
+                cfg_wnds.fields[2].ptr_size = sizeof(config.ip);
+                cfg_wnds.fields[3].ptr_size = sizeof(config.port);
 
-                cfg_wnds.entries[1].value_list.size = 2;
-                cfg_wnds.entries[1].value_list.options = malloc(cfg_wnds.entries[1].value_list.size*sizeof(struct option_t));
-                if (cfg_wnds.entries[1].value_list.options != NULL)
+                snprintf(tmp_str, STR_LEN, "%d", 0xFFFF);
+
+                cfg_wnds.fields[0].value_str.max_len = cfg_wnds.fields[0].ptr_size;
+                cfg_wnds.fields[2].value_str.max_len = cfg_wnds.fields[2].ptr_size;
+                cfg_wnds.fields[3].value_str.max_len =  strlen(tmp_str)+1;
+
+                strncpy(cfg_wnds.fields[0].value_str.text, config.name, LABEL_LEN);
+                strncpy(cfg_wnds.fields[2].value_str.text, config.ip, LABEL_LEN);
+                snprintf(cfg_wnds.fields[3].value_str.text, LABEL_LEN, "%d", config.port);
+
+                cfg_wnds.fields[0].value_str.str_len = strlen(cfg_wnds.fields[0].value_str.text);
+                cfg_wnds.fields[2].value_str.str_len = strlen(cfg_wnds.fields[2].value_str.text);
+                cfg_wnds.fields[3].value_str.str_len = strlen(cfg_wnds.fields[3].value_str.text);
+
+                cfg_wnds.fields[0].selection = cfg_wnds.fields[0].value_str.str_len < cfg_wnds.fields[0].value_str.max_len ? cfg_wnds.fields[0].value_str.str_len : cfg_wnds.fields[0].value_str.max_len-1;
+                cfg_wnds.fields[2].selection = cfg_wnds.fields[2].value_str.str_len < cfg_wnds.fields[2].value_str.max_len ? cfg_wnds.fields[2].value_str.str_len : cfg_wnds.fields[2].value_str.max_len-1;
+                cfg_wnds.fields[3].selection = cfg_wnds.fields[3].value_str.str_len < cfg_wnds.fields[3].value_str.max_len ? cfg_wnds.fields[3].value_str.str_len : cfg_wnds.fields[3].value_str.max_len-1;
+
+                cfg_wnds.fields[1].value_list.size = 2;
+                cfg_wnds.fields[1].value_list.options = malloc(cfg_wnds.fields[1].value_list.size*sizeof(struct option_t));
+                if (cfg_wnds.fields[1].value_list.options != NULL)
                 {
-                    strcpy(cfg_wnds.entries[1].value_list.options[0].option, PREFS_LANG_EN_LABEL);
-                    strcpy(cfg_wnds.entries[1].value_list.options[1].option, PREFS_LANG_RU_LABEL);
+                    strcpy(cfg_wnds.fields[1].value_list.options[0].option, PREFS_LANG_EN_LABEL);
+                    strcpy(cfg_wnds.fields[1].value_list.options[1].option, PREFS_LANG_RU_LABEL);
 
-                    cfg_wnds.entries[1].value_list.options[0].value = LANG_EN;
-                    cfg_wnds.entries[1].value_list.options[1].value = LANG_RU;
+                    cfg_wnds.fields[1].value_list.options[0].value = LANG_EN;
+                    cfg_wnds.fields[1].value_list.options[1].value = LANG_RU;
 
-                    for (index = 0; index < cfg_wnds.entries[1].value_list.size; ++index)
+                    for (index = 0; index < cfg_wnds.fields[1].value_list.size; ++index)
                     {
-                        cfg_wnds.entries[1].value_list.options[index].str_len = strlen(cfg_wnds.entries[1].value_list.options[index].option);
-                        if (config.language == cfg_wnds.entries[1].value_list.options[index].value)
+                        cfg_wnds.fields[1].value_list.options[index].str_len = strlen(cfg_wnds.fields[1].value_list.options[index].option);
+                        if (config.language == cfg_wnds.fields[1].value_list.options[index].value)
                         {
-                            cfg_wnds.entries[1].selection = index;
+                            cfg_wnds.fields[1].selection = index;
                         }
                     }
                 }
-
-                strncpy(cfg_wnds.entries[0].value_str.text, config.name, LABEL_LEN);
-                strncpy(cfg_wnds.entries[2].value_str.text, config.ip, LABEL_LEN);
-                snprintf(cfg_wnds.entries[3].value_str.text, LABEL_LEN, "%d", config.port);
-
-                cfg_wnds.entries[0].value_str.str_len = strlen(cfg_wnds.entries[0].value_str.text);
-                cfg_wnds.entries[2].value_str.str_len = strlen(cfg_wnds.entries[2].value_str.text);
-                cfg_wnds.entries[3].value_str.str_len = strlen(cfg_wnds.entries[3].value_str.text);
-
-                cfg_wnds.entries[0].selection = cfg_wnds.entries[0].value_str.str_len;
-                cfg_wnds.entries[2].selection = cfg_wnds.entries[2].value_str.str_len;
-                cfg_wnds.entries[3].selection = cfg_wnds.entries[3].value_str.str_len;
             }
 
             global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
@@ -1359,7 +1410,7 @@ int _draw_window(int wnd_type)
             cfg_wnds.pad = newpad(cfg_dims.pad_h, cfg_dims.pad_w);
 
             for (index = 0; index < 4; ++index)
-                cfg_wnds.entries[index].elem.wnd = subpad(cfg_wnds.pad, cfg_dims.entry_h, cfg_dims.entry_w, cfg_axis.entries_y[index], cfg_axis.entries_x[index]);
+                cfg_wnds.fields[index].elem.wnd = subpad(cfg_wnds.pad, cfg_dims.entry_h, cfg_dims.entry_w, cfg_axis.entries_y[index], cfg_axis.entries_x[index]);
 
             global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
             global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
@@ -1386,53 +1437,56 @@ int _draw_window(int wnd_type)
 
             mvwprintw(global_wnds.wnd, 0, ((global_dims.wnd_w-strlen(PREFS_SCR_LABEL))/2), PREFS_SCR_LABEL);
 
-            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
             for (index = 0; index < 4; ++index)
             {
-                mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.labels_x[index], cfg_wnds.entries[index].elem.lbl.text);
+                mvwprintw(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.labels_x[index], cfg_wnds.fields[index].elem.lbl.text);
             }
-            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
             for (index = 0; index < 4; ++index)
             {
-                mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.v_delim_x, ACS_VLINE);
-                switch (cfg_wnds.entries[index].type)
+                mvwaddch(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.v_delim_x, ACS_VLINE);
+                switch (cfg_wnds.fields[index].type)
                 {
-                case ENTRY_TYPE_STRING:
-                case ENTRY_TYPE_SHORT:
-                case ENTRY_TYPE_INT:
-                case ENTRY_TYPE_FLOAT:
-                case ENTRY_TYPE_IP:
-                    mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index], cfg_wnds.entries[index].value_str.text);
+                case FIELD_TYPE_STRING:
+                case FIELD_TYPE_SHORT:
+                case FIELD_TYPE_INT:
+                case FIELD_TYPE_FLOAT:
+                case FIELD_TYPE_IP:
+                {
+                    mvwprintw(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index], cfg_wnds.fields[index].value_str.text);
                     if (index == cfg_wnds.line)
                     {
                         cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
-                        cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                        cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
                         cursor.is_set = true;
 
                         move(cursor.y, cursor.x);
-                        // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                         curs_set(1);
                     }
+                }
                     break;
-                case ENTRY_TYPE_OPTION:
+                case FIELD_TYPE_OPTION:
+                {
                     if (index == cfg_wnds.line)
                     {
                         curs_set(0);
-                        wattron(cfg_wnds.entries[index].elem.wnd, A_BOLD);
-                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
-                        wattroff(cfg_wnds.entries[index].elem.wnd, A_BOLD);
+                        wattron(cfg_wnds.fields[index].elem.wnd, A_BOLD);
+                        mvwaddch(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
+                        wattroff(cfg_wnds.fields[index].elem.wnd, A_BOLD);
 
-                        mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].str_len)/2), "%s", cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].option);
+                        mvwprintw(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnds.fields[index].value_list.options[cfg_wnds.fields[index].selection].str_len)/2), "%s", cfg_wnds.fields[index].value_list.options[cfg_wnds.fields[index].selection].option);
 
-                        wattron(cfg_wnds.entries[index].elem.wnd, A_BOLD);
-                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
-                        wattroff(cfg_wnds.entries[index].elem.wnd, A_BOLD);
+                        wattron(cfg_wnds.fields[index].elem.wnd, A_BOLD);
+                        mvwaddch(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
+                        wattroff(cfg_wnds.fields[index].elem.wnd, A_BOLD);
                     }
                     else
-                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
-                        mvwprintw(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].str_len)/2), "%s", cfg_wnds.entries[index].value_list.options[cfg_wnds.entries[index].selection].option);
-                        mvwaddch(cfg_wnds.entries[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
+                        mvwaddch(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index]-1, '<');
+                        mvwprintw(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index]+((LABEL_LEN-cfg_wnds.fields[index].value_list.options[cfg_wnds.fields[index].selection].str_len)/2), "%s", cfg_wnds.fields[index].value_list.options[cfg_wnds.fields[index].selection].option);
+                        mvwaddch(cfg_wnds.fields[index].elem.wnd, 0, cfg_axis.fields_x[index]+LABEL_LEN, '>');
+                }
                     break;
                 default:
                     break;
@@ -1557,7 +1611,7 @@ int _update_window(void)
                 wnoutrefresh(join_srv.servers_pad);
                 wnoutrefresh(join_srv.caddr_w);
                 wnoutrefresh(join_srv.label_w);
-                wnoutrefresh(join_srv.tb_w);
+                wnoutrefresh(join_srv.tb_w.elem.wnd);
                 wnoutrefresh(join_srv.btns_border);
                 for (index = 0; index < 3; ++index)
                     wnoutrefresh(join_srv.btns[index].wnd);
@@ -1573,8 +1627,8 @@ int _update_window(void)
                 wnoutrefresh(create_srv.srv_info_w);
                 wnoutrefresh(create_srv.srv_info_sw);
                 wnoutrefresh(create_srv.pad);
-                for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
-                    wnoutrefresh(create_srv.entries[index].elem.wnd);
+                for (index = 0; index < sizeof(create_srv.fields)/sizeof(struct field_t); ++index)
+                    wnoutrefresh(create_srv.fields[index].elem.wnd);
                 for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
                     wnoutrefresh(create_srv.btns[index].wnd);
                 wnoutrefresh(global_wnds.note_w);
@@ -1587,8 +1641,8 @@ int _update_window(void)
             {
                 wnoutrefresh(global_wnds.wnd);
                 wnoutrefresh(cfg_wnds.pad_border);
-                for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
-                    wnoutrefresh(cfg_wnds.entries[index].elem.wnd);
+                for (index = 0; index < sizeof(cfg_wnds.fields)/sizeof(struct field_t); ++index)
+                    wnoutrefresh(cfg_wnds.fields[index].elem.wnd);
                 wnoutrefresh(global_wnds.note_w);
                 wnoutrefresh(global_wnds.note_sw);
                 pnoutrefresh(cfg_wnds.pad, cfg_axis.pad_ys, cfg_axis.pad_xs, cfg_axis.vis_pad_ys, cfg_axis.vis_pad_xs, cfg_axis.vis_pad_ye, cfg_axis.vis_pad_xe);
@@ -1679,7 +1733,7 @@ int _delete_window(void)
                 join_srv.btns[index].wnd = NULL;
             }
             delwin(join_srv.btns_border);
-            delwin(join_srv.tb_w);
+            delwin(join_srv.tb_w.elem.wnd);
             delwin(join_srv.label_w);
             delwin(join_srv.caddr_w);
             delwin(join_srv.servers_pad);
@@ -1699,7 +1753,7 @@ int _delete_window(void)
             join_srv.pad_border = NULL;
             join_srv.caddr_w = NULL;
             join_srv.label_w = NULL;
-            join_srv.tb_w = NULL;
+            join_srv.tb_w.elem.wnd = NULL;
             join_srv.btns_border = NULL;
             global_wnds.note_w = NULL;
             global_wnds.note_sw = NULL;
@@ -1717,8 +1771,8 @@ int _delete_window(void)
 
             for (index = 0; index < 7; ++index)
             {
-                delwin(create_srv.entries[index].elem.wnd);
-                create_srv.entries[index].elem.wnd = NULL;
+                delwin(create_srv.fields[index].elem.wnd);
+                create_srv.fields[index].elem.wnd = NULL;
             }
             delwin(create_srv.srv_info_sw);
             for (index = 0; index < 3; ++index)
@@ -1751,10 +1805,10 @@ int _delete_window(void)
 
             delwin(global_wnds.note_sw);
             delwin(global_wnds.note_w);
-            for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+            for (index = 0; index < sizeof(cfg_wnds.fields)/sizeof(struct field_t); ++index)
             {
-                delwin(cfg_wnds.entries[index].elem.wnd);
-                cfg_wnds.entries[index].elem.wnd = NULL;
+                delwin(cfg_wnds.fields[index].elem.wnd);
+                cfg_wnds.fields[index].elem.wnd = NULL;
             }
             delwin(cfg_wnds.pad);
             delwin(cfg_wnds.pad_border);
@@ -1855,18 +1909,18 @@ int _free_memory(int mode)
             }
         }
         
-        for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
+        for (index = 0; index < sizeof(create_srv.fields)/sizeof(struct field_t); ++index)
         {
-            if (create_srv.entries[index].elem.lbl.text != NULL)
+            if (create_srv.fields[index].elem.lbl.text != NULL)
             {
-                free(create_srv.entries[index].elem.lbl.text);
-                create_srv.entries[index].elem.lbl.text = NULL;
+                free(create_srv.fields[index].elem.lbl.text);
+                create_srv.fields[index].elem.lbl.text = NULL;
             }
-            if (create_srv.entries[index].type == ENTRY_TYPE_OPTION && create_srv.entries[index].value_list.options != NULL)
+            if (create_srv.fields[index].type == FIELD_TYPE_OPTION && create_srv.fields[index].value_list.options != NULL)
             {
-                free(create_srv.entries[index].value_list.options);
-                create_srv.entries[index].value_list.options = NULL;
-                create_srv.entries[index].type == ENTRY_TYPE_NONE;
+                free(create_srv.fields[index].value_list.options);
+                create_srv.fields[index].value_list.options = NULL;
+                create_srv.fields[index].type == FIELD_TYPE_NONE;
             }
         }
         for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
@@ -1878,18 +1932,18 @@ int _free_memory(int mode)
             }
         }
         
-        for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+        for (index = 0; index < sizeof(cfg_wnds.fields)/sizeof(struct field_t); ++index)
         {
-            if (cfg_wnds.entries[index].elem.lbl.text != NULL)
+            if (cfg_wnds.fields[index].elem.lbl.text != NULL)
             {
-                free(cfg_wnds.entries[index].elem.lbl.text);
-                cfg_wnds.entries[index].elem.lbl.text = NULL;
+                free(cfg_wnds.fields[index].elem.lbl.text);
+                cfg_wnds.fields[index].elem.lbl.text = NULL;
             }
-            if (cfg_wnds.entries[index].type == ENTRY_TYPE_OPTION && cfg_wnds.entries[index].value_list.options != NULL)
+            if (cfg_wnds.fields[index].type == FIELD_TYPE_OPTION && cfg_wnds.fields[index].value_list.options != NULL)
             {
-                free(cfg_wnds.entries[index].value_list.options);
-                cfg_wnds.entries[index].value_list.options = NULL;
-                cfg_wnds.entries[index].type == ENTRY_TYPE_NONE;
+                free(cfg_wnds.fields[index].value_list.options);
+                cfg_wnds.fields[index].value_list.options = NULL;
+                cfg_wnds.fields[index].type == FIELD_TYPE_NONE;
             }
         }
 
@@ -1931,18 +1985,18 @@ int _free_memory(int mode)
         break;
     case WND_CREATE_SRV:
     {
-        for (index = 0; index < sizeof(create_srv.entries)/sizeof(struct entry_t); ++index)
+        for (index = 0; index < sizeof(create_srv.fields)/sizeof(struct field_t); ++index)
         {
-            if (create_srv.entries[index].elem.lbl.text != NULL)
+            if (create_srv.fields[index].elem.lbl.text != NULL)
             {
-                free(create_srv.entries[index].elem.lbl.text);
-                create_srv.entries[index].elem.lbl.text = NULL;
+                free(create_srv.fields[index].elem.lbl.text);
+                create_srv.fields[index].elem.lbl.text = NULL;
             }
-            if (create_srv.entries[index].type == ENTRY_TYPE_OPTION && create_srv.entries[index].value_list.options != NULL)
+            if (create_srv.fields[index].type == FIELD_TYPE_OPTION && create_srv.fields[index].value_list.options != NULL)
             {
-                free(create_srv.entries[index].value_list.options);
-                create_srv.entries[index].value_list.options = NULL;
-                create_srv.entries[index].type == ENTRY_TYPE_NONE;
+                free(create_srv.fields[index].value_list.options);
+                create_srv.fields[index].value_list.options = NULL;
+                create_srv.fields[index].type == FIELD_TYPE_NONE;
             }
         }
         for (index = 0; index < sizeof(create_srv.btns)/sizeof(struct elem_wnd_t); ++index)
@@ -1957,18 +2011,18 @@ int _free_memory(int mode)
         break;
     case WND_PREFS:
     {
-        for (index = 0; index < sizeof(cfg_wnds.entries)/sizeof(struct entry_t); ++index)
+        for (index = 0; index < sizeof(cfg_wnds.fields)/sizeof(struct field_t); ++index)
         {
-            if (cfg_wnds.entries[index].elem.lbl.text != NULL)
+            if (cfg_wnds.fields[index].elem.lbl.text != NULL)
             {
-                free(cfg_wnds.entries[index].elem.lbl.text);
-                cfg_wnds.entries[index].elem.lbl.text = NULL;
+                free(cfg_wnds.fields[index].elem.lbl.text);
+                cfg_wnds.fields[index].elem.lbl.text = NULL;
             }
-            if (cfg_wnds.entries[index].type == ENTRY_TYPE_OPTION && cfg_wnds.entries[index].value_list.options != NULL)
+            if (cfg_wnds.fields[index].type == FIELD_TYPE_OPTION && cfg_wnds.fields[index].value_list.options != NULL)
             {
-                free(cfg_wnds.entries[index].value_list.options);
-                cfg_wnds.entries[index].value_list.options = NULL;
-                cfg_wnds.entries[index].type == ENTRY_TYPE_NONE;
+                free(cfg_wnds.fields[index].value_list.options);
+                cfg_wnds.fields[index].value_list.options = NULL;
+                cfg_wnds.fields[index].type == FIELD_TYPE_NONE;
             }
         }
     }
@@ -2234,15 +2288,6 @@ int join_srv_wnd(int *option, char *server_name)
 
         switch (symbol)
         {
-            case '\n':
-            {
-                // char *ch = servers_info[join_srv.line].server_name;
-                strncpy(server_name, servers_info[join_srv.line].server_name, STR_LEN);
-                // popup_wnd(server_name, POPUP_W_WAIT);
-                *option = WND_CHAT;
-                run_flag = 0;
-            }
-                break;
             case '\t':
             {
                 switch (join_srv.mode)
@@ -2261,11 +2306,10 @@ int join_srv_wnd(int *option, char *server_name)
                         join_srv.mode = MODE_TEXTBOX;
 
                         cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
-                        cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x;
+                        cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x+join_srv.tb_w.selection;
                         cursor.is_set = true;
 
                         move(cursor.y, cursor.x);
-                        // move(global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y, global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x);
                         curs_set(1);
                         break;
                     case MODE_TEXTBOX:
@@ -2291,7 +2335,120 @@ int join_srv_wnd(int *option, char *server_name)
                 _update_window();
             }
                 break;
-            case KEY_LEFT:
+            case KEY_F(1):
+            {
+            }
+                break;
+            case KEY_F(2):
+            {
+            }
+                break;
+            case KEY_F(3):
+            {
+                *option = WND_MAIN_MENU;
+                run_flag = 0;
+            }
+                break;
+            case KEY_F(4):
+            {
+                *option = WND_NONE;
+                run_flag = 0;
+            }
+                break;
+            default:
+                break;
+        }
+
+        switch (join_srv.mode)
+        {
+            case MODE_PAD:
+            {
+                switch (symbol)
+                {
+                case '\n':
+                {
+                    strncpy(server_name, servers_info[join_srv.line].server_name, STR_LEN);
+                    *option = WND_CHAT;
+                    run_flag = 0;
+                }
+                    break;
+                case KEY_UP:
+                {
+                    if (join_srv.line > 0)
+                    {
+                        mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
+                        if (servers_info[join_srv.line].max_users != 0)
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
+                        else
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
+
+                        join_srv.line--;
+
+                        wattron(join_srv.servers_pad, COLOR_PAIR(2));
+                        mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
+                        if (servers_info[join_srv.line].max_users != 0)
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
+                        else
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
+                        wattroff(join_srv.servers_pad, COLOR_PAIR(2));
+
+                        if (join_srv.line < join_axis.pad_ys)
+                        {
+                            join_axis.pad_ys += join_srv.line - join_axis.pad_ys;
+                            join_axis.pad_ye = join_axis.pad_ys + join_dims.vis_pad_h - 1;
+                        }
+
+                        _update_window();
+                    }
+                }
+                    break;
+                case KEY_DOWN:
+                    {
+                    if (join_srv.line < (sizeof(servers_info)/sizeof(struct server_info_t))-1)
+                    {
+                        mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
+                        if (servers_info[join_srv.line].max_users != 0)
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
+                        else
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
+
+                        join_srv.line++;
+
+                        wattron(join_srv.servers_pad, COLOR_PAIR(2));
+                        mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
+                        mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
+                        if (servers_info[join_srv.line].max_users != 0)
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
+                        else
+                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
+                        mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
+                        wattroff(join_srv.servers_pad, COLOR_PAIR(2));
+
+                        if (join_srv.line > join_axis.pad_ye)
+                        {
+                            join_axis.pad_ys += join_srv.line - join_axis.pad_ye;
+                            join_axis.pad_ye = join_axis.pad_ys + join_dims.vis_pad_h - 1;
+                        }
+
+                        _update_window();
+                    }
+                }
+                    break;
+                case KEY_LEFT:
                 {
                     if (join_srv.selection > 0)
                     {
@@ -2306,8 +2463,8 @@ int join_srv_wnd(int *option, char *server_name)
                         _update_window();
                     }
                 }
-                break;
-            case KEY_RIGHT:
+                    break;
+                case KEY_RIGHT:
                 {
                     if (join_srv.selection < 2)
                     {
@@ -2322,111 +2479,6 @@ int join_srv_wnd(int *option, char *server_name)
                         _update_window();
                     }
                 }
-                break;
-            case KEY_F(1):
-
-                break;
-            case KEY_F(2):
-                {
-                }
-                break;
-            case KEY_F(3):
-                {
-                    *option = WND_MAIN_MENU;
-                    run_flag = 0;
-                }
-                break;
-            case KEY_F(4):
-                {
-                    *option = WND_NONE;
-                    run_flag = 0;
-                }
-                break;
-            default:
-                break;
-        }
-
-        switch (join_srv.mode)
-        {
-            case MODE_PAD:
-            {
-                switch (symbol)
-                {
-                    case KEY_UP:
-                    {
-                        if (join_srv.line > 0)
-                        {
-                            mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
-                            if (servers_info[join_srv.line].max_users != 0)
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
-                            else
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
-
-                            join_srv.line--;
-
-                            wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                            mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
-                            if (servers_info[join_srv.line].max_users != 0)
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
-                            else
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
-                            wattroff(join_srv.servers_pad, COLOR_PAIR(2));
-
-                            if (join_srv.line < join_axis.pad_ys)
-                            {
-                                join_axis.pad_ys += join_srv.line - join_axis.pad_ys;
-                                join_axis.pad_ye = join_axis.pad_ys + join_dims.vis_pad_h - 1;
-                            }
-
-                            _update_window();
-                        }
-                    }
-                        break;
-                    case KEY_DOWN:
-                    {
-                        if (join_srv.line < (sizeof(servers_info)/sizeof(struct server_info_t))-1)
-                        {
-                            mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
-                            if (servers_info[join_srv.line].max_users != 0)
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
-                            else
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
-
-                            join_srv.line++;
-
-                            wattron(join_srv.servers_pad, COLOR_PAIR(2));
-                            mvwhline(join_srv.servers_pad, join_srv.line, 0, ' ', join_dims.pad_w);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, 0, "%s", servers_info[join_srv.line].server_name);
-                            mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-1, "%s:%d", servers_info[join_srv.line].ip, servers_info[join_srv.line].port);
-                            if (servers_info[join_srv.line].max_users != 0)
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d/%d", servers_info[join_srv.line].cur_users, servers_info[join_srv.line].max_users);
-                            else
-                                mvwprintw(join_srv.servers_pad, join_srv.line, join_axis.susers_x-1, "%d", servers_info[join_srv.line].cur_users);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.saddr_x-2, ACS_VLINE);
-                            mvwaddch(join_srv.servers_pad, join_srv.line, join_axis.susers_x-2, ACS_VLINE);
-                            wattroff(join_srv.servers_pad, COLOR_PAIR(2));
-
-                            if (join_srv.line > join_axis.pad_ye)
-                            {
-                                join_axis.pad_ys += join_srv.line - join_axis.pad_ye;
-                                join_axis.pad_ye = join_axis.pad_ys + join_dims.vis_pad_h - 1;
-                            }
-
-                            _update_window();
-                        }
-                    }
                     break;
                 default:
                     break;
@@ -2434,7 +2486,160 @@ int join_srv_wnd(int *option, char *server_name)
             }
                 break;
             case MODE_TEXTBOX:
-            {}
+            {
+                switch (symbol)
+                {
+                case '\n':
+                {
+                    if (join_srv.tb_w.value_str.str_len == 0)
+                    {
+                        popup_wnd("Server address couldn't be empty", POPUP_W_WAIT);
+                        break;
+                    }
+
+                    if (join_srv.column_index == -1)
+                    {
+                        popup_wnd("No port specified", POPUP_W_WAIT);
+                        break;
+                    }
+
+                    strncpy(join_srv.ip, join_srv.tb_w.value_str.text, join_srv.column_index);
+                    strncpy(join_srv.port, &join_srv.tb_w.value_str.text[join_srv.column_index+1], PORT_LEN);
+
+                    // popup_wnd(join_srv.ip, POPUP_W_WAIT);
+                    popup_wnd(join_srv.port, POPUP_W_WAIT);
+                    break;
+                    // if (join_srv.column_index < 8)
+                    // {
+                    //     popup_wnd("No ip specified", POPUP_W_WAIT);
+                    //     break;
+                    // }
+
+                    strncpy(server_name, servers_info[join_srv.line].server_name, STR_LEN);
+                    *option = WND_CHAT;
+                    run_flag = 0;
+                }
+                    break;
+                case KEY_LEFT:
+                {
+                    if (join_srv.tb_w.selection > 0)
+                    {
+                        join_srv.tb_w.selection--;
+                        cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
+                        cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x+join_srv.tb_w.selection;
+
+                        move(cursor.y, cursor.x);
+
+                        _update_window();
+                    }
+                }
+                    break;
+                case KEY_RIGHT:
+                {
+                    if (join_srv.tb_w.selection < join_srv.tb_w.value_str.str_len)
+                    {
+                        if (join_srv.tb_w.selection < join_srv.tb_w.value_str.max_len-1)
+                        {
+                            join_srv.tb_w.selection++;
+                            cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
+                            cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x+join_srv.tb_w.selection;
+
+                            move(cursor.y, cursor.x);
+
+                            _update_window();
+                        }
+                    }
+                }
+                    break;
+                case KEY_BACKSPACE:
+                {
+                    if (join_srv.tb_w.value_str.str_len <= 0)
+                        break;
+
+                    if (join_srv.tb_w.selection >= join_srv.tb_w.value_str.max_len)
+                        break;
+
+                    if (join_srv.tb_w.value_str.text[join_srv.tb_w.selection] == ':')
+                        join_srv.column_index = -1;
+
+                    _remove_char_at(join_srv.tb_w.value_str.text, join_srv.tb_w.value_str.max_len, join_srv.tb_w.selection-1);
+
+                    if (join_srv.tb_w.selection > 0)
+                    {
+                        join_srv.tb_w.selection--;
+
+                        cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
+                        cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x+join_srv.tb_w.selection;
+
+                        move(cursor.y, cursor.x);
+                    }
+
+                    if (join_srv.tb_w.value_str.str_len > 0)
+                        join_srv.tb_w.value_str.str_len--;
+
+                    mvwhline(join_srv.tb_w.elem.wnd, 0, 0, ' ', join_dims.tb_w);
+                    mvwprintw(join_srv.tb_w.elem.wnd, 0, 0, "%s", join_srv.tb_w.value_str.text);
+                    _update_window();
+                }
+                    break;
+                default:
+                {
+                    if (join_srv.tb_w.value_str.str_len == join_srv.tb_w.value_str.max_len-1)
+                        break;
+                    
+                    switch (symbol)
+                    {
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                    case '.':
+                    case ':':
+                    {
+                        if ((char)symbol == ':')
+                            join_srv.column_index = join_srv.tb_w.selection;
+
+                        if (join_srv.tb_w.selection == join_srv.tb_w.value_str.max_len-1 || join_srv.tb_w.value_str.str_len == 0)
+                        {
+                            join_srv.tb_w.value_str.text[join_srv.tb_w.selection] = (char)symbol;
+                        }
+                        else if (join_srv.tb_w.selection < join_srv.tb_w.value_str.max_len-1)
+                        {
+                            _put_char_at(join_srv.tb_w.value_str.text, join_srv.tb_w.value_str.max_len, (char)symbol, join_srv.tb_w.selection);
+                        }
+
+                        if (join_srv.tb_w.selection < join_srv.tb_w.value_str.max_len-1)
+                        {
+                            join_srv.tb_w.selection++;
+
+                            cursor.y = global_axis.wnd_y+join_axis.caddr_y+join_axis.tb_y;
+                            cursor.x = global_axis.wnd_x+join_axis.caddr_x+join_axis.tb_x+join_srv.tb_w.selection;
+
+                            move(cursor.y, cursor.x);
+                        }
+
+                        if (join_srv.tb_w.value_str.str_len != join_srv.tb_w.value_str.max_len)
+                            join_srv.tb_w.value_str.str_len++;
+
+                        mvwhline(join_srv.tb_w.elem.wnd, 0, 0, ' ', join_dims.tb_w);
+                        mvwprintw(join_srv.tb_w.elem.wnd, 0, 0, "%s", join_srv.tb_w.value_str.text);
+                        _update_window();
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+
+                }
+                    break;
+                }
+            }
                 break;
             default:
                 break;
@@ -2483,20 +2688,20 @@ int create_srv_wnd(int *option, char *server_name)
                 {
                     case MODE_PAD:
                     {
-                        mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.entries[create_srv.line].elem.lbl.text);
+                        mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.fields[create_srv.line].elem.lbl.text);
 
-                        switch (create_srv.entries[create_srv.line].type)
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
                             curs_set(0);
                             break;
-                        case ENTRY_TYPE_OPTION:
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                        case FIELD_TYPE_OPTION:
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             break;
                         default:
                             break;
@@ -2515,35 +2720,32 @@ int create_srv_wnd(int *option, char *server_name)
 
                         create_srv.mode = MODE_PAD;
 
-                        switch (create_srv.entries[create_srv.line].type)
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
                         {
                             cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
                             cursor.is_set = true;
 
                             move(cursor.y, cursor.x);
-                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             curs_set(1);
                         }
                             
                             break;
-                        case ENTRY_TYPE_OPTION:
+                        case FIELD_TYPE_OPTION:
                         {
                             cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
                         }
                             break;
                         default:
@@ -2589,20 +2791,20 @@ int create_srv_wnd(int *option, char *server_name)
                 {
                     if (create_srv.line > 0)
                     {
-                        mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.entries[create_srv.line].elem.lbl.text);
+                        mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.fields[create_srv.line].elem.lbl.text);
 
-                        switch (create_srv.entries[create_srv.line].type)
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
                             curs_set(0);
                             break;
-                        case ENTRY_TYPE_OPTION:
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                        case FIELD_TYPE_OPTION:
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
                             break;
                         default:
                             break;
@@ -2610,39 +2812,35 @@ int create_srv_wnd(int *option, char *server_name)
 
                         create_srv.line--;
 
-                        wattron(create_srv.entries[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.entries[create_srv.line].elem.lbl.text);
-                        wattroff(create_srv.entries[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        wattron(create_srv.fields[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.fields[create_srv.line].elem.lbl.text);
+                        wattroff(create_srv.fields[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
-                        switch (create_srv.entries[create_srv.line].type)
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
                         {
                             cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
                             cursor.is_set = true;
 
                             move(cursor.y, cursor.x);
-                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             curs_set(1);
                         }
-                            
                             break;
-                        case ENTRY_TYPE_OPTION:
+                        case FIELD_TYPE_OPTION:
                         {
                             cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
                         }
                             break;
                         default:
@@ -2656,20 +2854,24 @@ int create_srv_wnd(int *option, char *server_name)
                 {
                     if (create_srv.line < 6)
                     {
-                        mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.entries[create_srv.line].elem.lbl.text);
+                        mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.fields[create_srv.line].elem.lbl.text);
 
-                        switch (create_srv.entries[create_srv.line].type)
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
+                        {
                             curs_set(0);
+                        }
                             break;
-                        case ENTRY_TYPE_OPTION:
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                        case FIELD_TYPE_OPTION:
+                        {
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                        }
                             break;
                         default:
                             break;
@@ -2677,39 +2879,35 @@ int create_srv_wnd(int *option, char *server_name)
 
                         create_srv.line++;
 
-                        wattron(create_srv.entries[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.entries[create_srv.line].elem.lbl.text);
-                        wattroff(create_srv.entries[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        wattron(create_srv.fields[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.labels_x[create_srv.line], create_srv.fields[create_srv.line].elem.lbl.text);
+                        wattroff(create_srv.fields[create_srv.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
-                        switch (create_srv.entries[create_srv.line].type)
+                        switch (create_srv.fields[create_srv.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
                         {
                             cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
                             cursor.is_set = true;
 
                             move(cursor.y, cursor.x);
-                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                             curs_set(1);
                         }
                             break;
-                        case ENTRY_TYPE_OPTION:
+                        case FIELD_TYPE_OPTION:
                         {
                             cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
                         }
                             break;
                         default:
@@ -2721,193 +2919,367 @@ int create_srv_wnd(int *option, char *server_name)
                     break;
                 case KEY_LEFT:
                 {
-                    switch (create_srv.entries[create_srv.line].type)
+                    switch (create_srv.fields[create_srv.line].type)
                     {
-                    case ENTRY_TYPE_STRING:
-                    case ENTRY_TYPE_SHORT:
-                    case ENTRY_TYPE_INT:
-                    case ENTRY_TYPE_FLOAT:
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_STRING:
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
+                    case FIELD_TYPE_FLOAT:
+                    case FIELD_TYPE_IP:
                     {
-                        if (create_srv.entries[create_srv.line].selection > 0)
+                        if (create_srv.fields[create_srv.line].selection > 0)
                         {
-                            create_srv.entries[create_srv.line].selection--;
+                            create_srv.fields[create_srv.line].selection--;
                             cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
 
                             move(cursor.y, cursor.x);
-                            // mvwprintw(global_wnds.wnd, 0, 0, "<%d:%d>", create_srv.entries[create_srv.line].selection,create_srv.entries[create_srv.line].value_str.max_len);
-                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
                         }
                     }
-                        
                         break;
-                    case ENTRY_TYPE_OPTION:
+                    case FIELD_TYPE_OPTION:
                     {
-                        if (create_srv.entries[create_srv.line].selection > 0)
+                        if (create_srv.fields[create_srv.line].selection > 0)
                         {
-                            create_srv.entries[create_srv.line].selection--;
+                            create_srv.fields[create_srv.line].selection--;
                             
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
 
-                            mvwhline(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
-                            mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+((LABEL_LEN-create_srv.entries[create_srv.line].value_list.options[create_srv.entries[create_srv.line].selection].str_len)/2), "%s", create_srv.entries[create_srv.line].value_list.options[create_srv.entries[create_srv.line].selection].option);
+                            mvwhline(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
+                            mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+((LABEL_LEN-create_srv.fields[create_srv.line].value_list.options[create_srv.fields[create_srv.line].selection].str_len)/2), "%s", create_srv.fields[create_srv.line].value_list.options[create_srv.fields[create_srv.line].selection].option);
 
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+
+                            *((int *)create_srv.fields[create_srv.line].value_ptr) = create_srv.fields[create_srv.line].value_list.options[create_srv.fields[create_srv.line].selection].value;
                         }
                     }
                         break;
                     default:
                         break;
                     }
+
+                    wclear(create_srv.srv_info_sw);
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_LABEL""CREATE_SCR_SINFO_SNAME, create_srv.fields[0].value_str.text);
+                    if (*((int *)create_srv.fields[2].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, CREATE_SCR_NO_RESTR_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, create_srv.fields[1].value_str.text);
+                    
+                    if (*((int *)create_srv.fields[5].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, CREATE_SCR_LOCAL_IP_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, create_srv.fields[3].value_str.text);
+                    if (*((int *)create_srv.fields[6].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, CREATE_SCR_AUTO_PORT_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, create_srv.fields[4].value_str.text);
+
                     _update_window();
                 }
                     break;
                 case KEY_RIGHT:
                 {
-                    switch (create_srv.entries[create_srv.line].type)
+                    switch (create_srv.fields[create_srv.line].type)
                     {
-                    case ENTRY_TYPE_STRING:
-                    case ENTRY_TYPE_SHORT:
-                    case ENTRY_TYPE_INT:
-                    case ENTRY_TYPE_FLOAT:
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_STRING:
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
+                    case FIELD_TYPE_FLOAT:
+                    case FIELD_TYPE_IP:
                     {
-                        if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.str_len)
+                        if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.str_len)
                         {
-                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                create_srv.entries[create_srv.line].selection++;
+                                create_srv.fields[create_srv.line].selection++;
                                 cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
 
                                 move(cursor.y, cursor.x);
                             }
-                            // move(create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line], create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection);
-                            // mvwprintw(global_wnds.wnd, 0, 0, "<%d:%d>", create_srv.entries[create_srv.line].selection, create_srv.entries[create_srv.line].value_str.max_len);
                         }
                     }
                         break;
-                    case ENTRY_TYPE_OPTION:
+                    case FIELD_TYPE_OPTION:
                     {
-                        if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_list.size-1)
+                        if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_list.size-1)
                         {
-                            create_srv.entries[create_srv.line].selection++;
+                            create_srv.fields[create_srv.line].selection++;
                             
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]-1, '<');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
 
-                            mvwhline(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
-                            mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+((LABEL_LEN-create_srv.entries[create_srv.line].value_list.options[create_srv.entries[create_srv.line].selection].str_len)/2), "%s", create_srv.entries[create_srv.line].value_list.options[create_srv.entries[create_srv.line].selection].option);
+                            mvwhline(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
+                            mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+((LABEL_LEN-create_srv.fields[create_srv.line].value_list.options[create_srv.fields[create_srv.line].selection].str_len)/2), "%s", create_srv.fields[create_srv.line].value_list.options[create_srv.fields[create_srv.line].selection].option);
 
-                            wattron(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
-                            mvwaddch(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
-                            wattroff(create_srv.entries[create_srv.line].elem.wnd, A_BOLD);
+                            wattron(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+                            mvwaddch(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line]+LABEL_LEN, '>');
+                            wattroff(create_srv.fields[create_srv.line].elem.wnd, A_BOLD);
+
+                            *((int *)create_srv.fields[create_srv.line].value_ptr) = create_srv.fields[create_srv.line].value_list.options[create_srv.fields[create_srv.line].selection].value;
                         }
                     }
                         break;
                     default:
                         break;
                     }
+
+                    wclear(create_srv.srv_info_sw);
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_LABEL""CREATE_SCR_SINFO_SNAME, create_srv.fields[0].value_str.text);
+                    if (*((int *)create_srv.fields[2].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, CREATE_SCR_NO_RESTR_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, create_srv.fields[1].value_str.text);
+                    
+                    if (*((int *)create_srv.fields[5].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, CREATE_SCR_LOCAL_IP_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, create_srv.fields[3].value_str.text);
+                    if (*((int *)create_srv.fields[6].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, CREATE_SCR_AUTO_PORT_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, create_srv.fields[4].value_str.text);
+
                     _update_window();
                 }
                     break;
                 case KEY_BACKSPACE:
                 {
-                    if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
-                    {
-                        create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = 0;
-                    }
-                    else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
-                    {
-                        _remove_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, create_srv.entries[create_srv.line].selection-1);
-                    }
 
-                    if (create_srv.entries[create_srv.line].selection > 0)
+                    switch (create_srv.fields[create_srv.line].type)
                     {
-                        create_srv.entries[create_srv.line].selection--;
-                        cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                        cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                    case FIELD_TYPE_STRING:
+                    case FIELD_TYPE_IP:
+                    {
+                        if (create_srv.fields[create_srv.line].value_str.str_len <= 0)
+                            break;
 
-                        move(cursor.y, cursor.x);
-                    }
-                    if (create_srv.entries[create_srv.line].value_str.str_len > 0)
-                        create_srv.entries[create_srv.line].value_str.str_len--;
-                    
-                    if (create_srv.entries[create_srv.line].value_str.str_len == 0)
-                    {
-                        switch (create_srv.entries[create_srv.line].type)
-                        {
-                        case ENTRY_TYPE_SHORT:
-                        {
-                            *((short *)create_srv.entries[create_srv.line].value_ptr) = 0;
-                        }
+                        if (create_srv.fields[create_srv.line].selection >= create_srv.fields[create_srv.line].value_str.max_len)
                             break;
-                        case ENTRY_TYPE_INT:
+
+                        _remove_char_at(create_srv.fields[create_srv.line].value_str.text, create_srv.fields[create_srv.line].value_str.max_len, create_srv.fields[create_srv.line].selection-1);
+
+                        if (create_srv.fields[create_srv.line].selection > 0)
                         {
-                            *((int *)create_srv.entries[create_srv.line].value_ptr) = 0;
+                            create_srv.fields[create_srv.line].selection--;
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
+
+                            move(cursor.y, cursor.x);
                         }
-                            break;
-                        case ENTRY_TYPE_FLOAT:
+
+                        if (create_srv.fields[create_srv.line].value_str.str_len > 0)
+                            create_srv.fields[create_srv.line].value_str.str_len--;
+
+                        switch (create_srv.line)
                         {
-                            *((float *)create_srv.entries[create_srv.line].value_ptr) = 0;
+                        case 3:
+                        {
+                            if (create_srv.fields[create_srv.line].value_str.str_len == 0)
+                                *((int *)create_srv.fields[5].value_ptr) = true;
+                            else
+                                *((int *)create_srv.fields[5].value_ptr) = false;
+
+                            for (index = 0; index < create_srv.fields[5].value_list.size; ++index)
+                            {
+                                if (create_srv.fields[5].value_list.options[index].value == *((int *)create_srv.fields[5].value_ptr))
+                                {
+                                    create_srv.fields[5].selection = index;
+                                }
+                            }
+                            mvwhline(create_srv.fields[5].elem.wnd, 0, create_axis.fields_x[5], ' ', LABEL_LEN);
+                            mvwprintw(create_srv.fields[5].elem.wnd, 0, create_axis.fields_x[5]+((LABEL_LEN-create_srv.fields[5].value_list.options[create_srv.fields[5].selection].str_len)/2), "%s", create_srv.fields[5].value_list.options[create_srv.fields[5].selection].option);
                         }
                             break;
                         default:
                             break;
                         }
-                        create_srv.entries[create_srv.line].value_str.text[0] = '0';
+
+                        switch (create_srv.fields[create_srv.line].type)
+                        {
+                        case FIELD_TYPE_STRING:
+                        {
+                            strncpy((char *)create_srv.fields[create_srv.line].value_ptr, create_srv.fields[create_srv.line].value_str.text, ((char *)create_srv.fields[create_srv.line].ptr_size));
+                        }
+                            break;
+                        case FIELD_TYPE_IP:
+                        {
+                            strncpy((char *)create_srv.fields[create_srv.line].value_ptr, create_srv.fields[create_srv.line].value_str.text, ((char *)create_srv.fields[create_srv.line].ptr_size));
+                        }
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                        break;
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
+                    case FIELD_TYPE_FLOAT:
+                    {
+                        int tmp;
+
+                        if (create_srv.fields[create_srv.line].value_str.str_len <= 0)
+                            break;
+
+                        if (create_srv.fields[create_srv.line].selection >= create_srv.fields[create_srv.line].value_str.max_len)
+                            break;
+
+                        _remove_char_at(create_srv.fields[create_srv.line].value_str.text, create_srv.fields[create_srv.line].value_str.max_len, create_srv.fields[create_srv.line].selection-1);
+
+                        if (create_srv.fields[create_srv.line].selection > 0)
+                        {
+                            create_srv.fields[create_srv.line].selection--;
+                            cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
+                            cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
+
+                            move(cursor.y, cursor.x);
+                        }
+
+                        if (create_srv.fields[create_srv.line].value_str.str_len > 0)
+                            create_srv.fields[create_srv.line].value_str.str_len--;
+
+                        switch (create_srv.fields[create_srv.line].type)
+                        {
+                        case FIELD_TYPE_SHORT:
+                        {
+                            *((short *)create_srv.fields[create_srv.line].value_ptr) = (short)atoi(create_srv.fields[create_srv.line].value_str.text);
+                            tmp = (int)*((short *)create_srv.fields[create_srv.line].value_ptr);
+                        }
+                            break;
+                        case FIELD_TYPE_INT:
+                        {
+                            *((int *)create_srv.fields[create_srv.line].value_ptr) = atoi(create_srv.fields[create_srv.line].value_str.text);
+                            tmp = *((int *)create_srv.fields[create_srv.line].value_ptr);
+                        }
+                            break;
+                        case FIELD_TYPE_FLOAT:
+                        {
+                            *((float *)create_srv.fields[create_srv.line].value_ptr) = (float)atof(create_srv.fields[create_srv.line].value_str.text);
+                            if (*((float *)create_srv.fields[create_srv.line].value_ptr) > 0 && *((float *)create_srv.fields[create_srv.line].value_ptr) < 1)
+                                tmp = 1;
+                            else
+                                tmp = (int)*((float *)create_srv.fields[create_srv.line].value_ptr);
+                        }
+                            break;
+                        default:
+                            break;
+                        }
+
+                        switch (create_srv.line)
+                        {
+                        case 1:
+                        {
+                            if (tmp == 0)
+                            {
+                                *((int *)create_srv.fields[2].value_ptr) = true;
+                                create_srv.fields[create_srv.line].value_str.text[0] = '0';
+                            }
+                            else
+                                *((int *)create_srv.fields[2].value_ptr) = false;
+
+                            for (index = 0; index < create_srv.fields[2].value_list.size; ++index)
+                            {
+                                if (create_srv.fields[2].value_list.options[index].value == *((int *)create_srv.fields[2].value_ptr))
+                                {
+                                    create_srv.fields[2].selection = index;
+                                }
+                            }
+                            mvwhline(create_srv.fields[2].elem.wnd, 0, create_axis.fields_x[2], ' ', LABEL_LEN);
+                            mvwprintw(create_srv.fields[2].elem.wnd, 0, create_axis.fields_x[2]+((LABEL_LEN-create_srv.fields[2].value_list.options[create_srv.fields[2].selection].str_len)/2), "%s", create_srv.fields[2].value_list.options[create_srv.fields[2].selection].option);
+                        }
+                            break;
+                        case 4:
+                        {
+                            if (tmp == 0)
+                            {
+                                *((int *)create_srv.fields[6].value_ptr) = true;
+                                create_srv.fields[create_srv.line].value_str.text[0] = '0';
+                            }
+                            else
+                                *((int *)create_srv.fields[6].value_ptr) = false;
+
+                            for (index = 0; index < create_srv.fields[6].value_list.size; ++index)
+                            {
+                                if (create_srv.fields[6].value_list.options[index].value == *((int *)create_srv.fields[6].value_ptr))
+                                {
+                                    create_srv.fields[6].selection = index;
+                                }
+                            }
+                            mvwhline(create_srv.fields[6].elem.wnd, 0, create_axis.fields_x[6], ' ', LABEL_LEN);
+                            mvwprintw(create_srv.fields[6].elem.wnd, 0, create_axis.fields_x[6]+((LABEL_LEN-create_srv.fields[6].value_list.options[create_srv.fields[6].selection].str_len)/2), "%s", create_srv.fields[6].value_list.options[create_srv.fields[6].selection].option);
+                        }
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                        break;
+                    default:
+                        break;
                     }
 
                     wclear(create_srv.srv_info_sw);
-                    if (*((short *)create_srv.entries[1].value_ptr) == 0)
-                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, CREATE_SCR_NO_RESTR_LABEL, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_LABEL""CREATE_SCR_SINFO_SNAME, create_srv.fields[0].value_str.text);
+                    if (*((int *)create_srv.fields[2].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, CREATE_SCR_NO_RESTR_LABEL);
                     else
-                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, create_srv.entries[1].value_str.text, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, create_srv.fields[1].value_str.text);
+                    
+                    if (*((int *)create_srv.fields[5].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, CREATE_SCR_LOCAL_IP_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, create_srv.fields[3].value_str.text);
+                    if (*((int *)create_srv.fields[6].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, CREATE_SCR_AUTO_PORT_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, create_srv.fields[4].value_str.text);
 
-                    mvwhline(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
-                    mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], "%s", create_srv.entries[create_srv.line].value_str.text);
+                    mvwhline(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
+                    mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], "%s", create_srv.fields[create_srv.line].value_str.text);
                     _update_window();
                 }
                     break;
                 default:
                 {
-                    switch (create_srv.entries[create_srv.line].type)
+                    if (create_srv.fields[create_srv.line].value_str.str_len == create_srv.fields[create_srv.line].value_str.max_len-1)
+                        break;
+
+                    switch (create_srv.fields[create_srv.line].type)
                     {
-                    case ENTRY_TYPE_STRING:
+                    case FIELD_TYPE_STRING:
                     {
                         if (symbol > 0x1F && symbol < 0x7F)
                         {
-                            if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection == create_srv.fields[create_srv.line].value_str.max_len-1 || create_srv.fields[create_srv.line].value_str.str_len == 0)
                             {
-                                create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = (char)symbol;
+                                create_srv.fields[create_srv.line].value_str.text[create_srv.fields[create_srv.line].selection] = (char)symbol;
                             }
-                            else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            else if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                _put_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, (char)symbol, create_srv.entries[create_srv.line].selection);
+                                _put_char_at(create_srv.fields[create_srv.line].value_str.text, create_srv.fields[create_srv.line].value_str.max_len, (char)symbol, create_srv.fields[create_srv.line].selection);
                             }
 
-                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                create_srv.entries[create_srv.line].selection++;
+                                create_srv.fields[create_srv.line].selection++;
                                 cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
 
                                 move(cursor.y, cursor.x);
                             }
 
-                            if (create_srv.entries[create_srv.line].value_str.str_len != create_srv.entries[create_srv.line].value_str.max_len)
-                                create_srv.entries[create_srv.line].value_str.str_len++;
+                            if (create_srv.fields[create_srv.line].value_str.str_len != create_srv.fields[create_srv.line].value_str.max_len)
+                                create_srv.fields[create_srv.line].value_str.str_len++;
                         }
                     }
                         break;
-                    case ENTRY_TYPE_SHORT:
-                    case ENTRY_TYPE_INT:
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
                     {
                         switch (symbol)
                         {
@@ -2922,26 +3294,62 @@ int create_srv_wnd(int *option, char *server_name)
                         case '8':
                         case '9':
                         {
-                            if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection == create_srv.fields[create_srv.line].value_str.max_len-1 || create_srv.fields[create_srv.line].value_str.str_len == 0)
                             {
-                                create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = (char)symbol;
+                                create_srv.fields[create_srv.line].value_str.text[create_srv.fields[create_srv.line].selection] = (char)symbol;
                             }
-                            else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            else if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                _put_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, (char)symbol, create_srv.entries[create_srv.line].selection);
+                                _put_char_at(create_srv.fields[create_srv.line].value_str.text, create_srv.fields[create_srv.line].value_str.max_len, (char)symbol, create_srv.fields[create_srv.line].selection);
                             }
 
-                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                create_srv.entries[create_srv.line].selection++;
+                                create_srv.fields[create_srv.line].selection++;
                                 cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
 
                                 move(cursor.y, cursor.x);
                             }
 
-                            if (create_srv.entries[create_srv.line].value_str.str_len != create_srv.entries[create_srv.line].value_str.max_len)
-                                create_srv.entries[create_srv.line].value_str.str_len++;
+                            if (create_srv.fields[create_srv.line].value_str.str_len != create_srv.fields[create_srv.line].value_str.max_len)
+                                create_srv.fields[create_srv.line].value_str.str_len++;
+
+                            switch (create_srv.line)
+                            {
+                            case 1:
+                            {
+                                *((int *)create_srv.fields[2].value_ptr) = false;
+
+                                for (index = 0; index < create_srv.fields[2].value_list.size; ++index)
+                                {
+                                    if (create_srv.fields[2].value_list.options[index].value == *((int *)create_srv.fields[2].value_ptr))
+                                    {
+                                        create_srv.fields[2].selection = index;
+                                    }
+                                }
+                                mvwhline(create_srv.fields[2].elem.wnd, 0, create_axis.fields_x[2], ' ', LABEL_LEN);
+                                mvwprintw(create_srv.fields[2].elem.wnd, 0, create_axis.fields_x[2]+((LABEL_LEN-create_srv.fields[2].value_list.options[create_srv.fields[2].selection].str_len)/2), "%s", create_srv.fields[2].value_list.options[create_srv.fields[2].selection].option);
+                            }
+                                break;
+                            case 4:
+                            {
+                                *((int *)create_srv.fields[6].value_ptr) = false;
+
+                                for (index = 0; index < create_srv.fields[6].value_list.size; ++index)
+                                {
+                                    if (create_srv.fields[6].value_list.options[index].value == *((int *)create_srv.fields[6].value_ptr))
+                                    {
+                                        create_srv.fields[6].selection = index;
+                                    }
+                                }
+                                mvwhline(create_srv.fields[6].elem.wnd, 0, create_axis.fields_x[6], ' ', LABEL_LEN);
+                                mvwprintw(create_srv.fields[6].elem.wnd, 0, create_axis.fields_x[6]+((LABEL_LEN-create_srv.fields[6].value_list.options[create_srv.fields[6].selection].str_len)/2), "%s", create_srv.fields[6].value_list.options[create_srv.fields[6].selection].option);
+                            }
+                                break;
+                            default:
+                                break;
+                            }
                         }
                             break;
                         default:
@@ -2949,8 +3357,8 @@ int create_srv_wnd(int *option, char *server_name)
                         }
                     }
                         break;
-                    case ENTRY_TYPE_FLOAT:
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_FLOAT:
+                    case FIELD_TYPE_IP:
                     {
                         switch (symbol)
                         {
@@ -2966,26 +3374,47 @@ int create_srv_wnd(int *option, char *server_name)
                         case '9':
                         case '.':
                         {
-                            if (create_srv.entries[create_srv.line].selection == create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection == create_srv.fields[create_srv.line].value_str.max_len-1 || create_srv.fields[create_srv.line].value_str.str_len == 0)
                             {
-                                create_srv.entries[create_srv.line].value_str.text[create_srv.entries[create_srv.line].selection] = (char)symbol;
+                                create_srv.fields[create_srv.line].value_str.text[create_srv.fields[create_srv.line].selection] = (char)symbol;
                             }
-                            else if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            else if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                _put_char_at(create_srv.entries[create_srv.line].value_str.text, create_srv.entries[create_srv.line].value_str.max_len, (char)symbol, create_srv.entries[create_srv.line].selection);
+                                _put_char_at(create_srv.fields[create_srv.line].value_str.text, create_srv.fields[create_srv.line].value_str.max_len, (char)symbol, create_srv.fields[create_srv.line].selection);
                             }
 
-                            if (create_srv.entries[create_srv.line].selection < create_srv.entries[create_srv.line].value_str.max_len-1)
+                            if (create_srv.fields[create_srv.line].selection < create_srv.fields[create_srv.line].value_str.max_len-1)
                             {
-                                create_srv.entries[create_srv.line].selection++;
+                                create_srv.fields[create_srv.line].selection++;
                                 cursor.y = create_axis.vis_pad_ys+create_axis.entries_y[create_srv.line];
-                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.entries[create_srv.line].selection;
+                                cursor.x = create_axis.vis_pad_xs+create_axis.entries_x[create_srv.line]+create_axis.fields_x[create_srv.line]+create_srv.fields[create_srv.line].selection;
 
                                 move(cursor.y, cursor.x);
                             }
 
-                            if (create_srv.entries[create_srv.line].value_str.str_len != create_srv.entries[create_srv.line].value_str.max_len)
-                                create_srv.entries[create_srv.line].value_str.str_len++;
+                            if (create_srv.fields[create_srv.line].value_str.str_len != create_srv.fields[create_srv.line].value_str.max_len)
+                                create_srv.fields[create_srv.line].value_str.str_len++;
+
+                            switch (create_srv.line)
+                            {
+                            case 3:
+                            {
+                                *((int *)create_srv.fields[5].value_ptr) = false;
+
+                                for (index = 0; index < create_srv.fields[5].value_list.size; ++index)
+                                {
+                                    if (create_srv.fields[5].value_list.options[index].value == *((int *)create_srv.fields[5].value_ptr))
+                                    {
+                                        create_srv.fields[5].selection = index;
+                                    }
+                                }
+                                mvwhline(create_srv.fields[5].elem.wnd, 0, create_axis.fields_x[5], ' ', LABEL_LEN);
+                                mvwprintw(create_srv.fields[5].elem.wnd, 0, create_axis.fields_x[5]+((LABEL_LEN-create_srv.fields[5].value_list.options[create_srv.fields[5].selection].str_len)/2), "%s", create_srv.fields[5].value_list.options[create_srv.fields[5].selection].option);
+                            }
+                                break;
+                            default:
+                                break;
+                            }
                         }
                             break;
                         default:
@@ -2997,32 +3426,32 @@ int create_srv_wnd(int *option, char *server_name)
                         break;
                     }
 
-                    switch (create_srv.entries[create_srv.line].type)
+                    switch (create_srv.fields[create_srv.line].type)
                     {
-                    case ENTRY_TYPE_STRING:
+                    case FIELD_TYPE_STRING:
                     {
-                        strncpy((char *)create_srv.entries[create_srv.line].value_ptr, create_srv.entries[create_srv.line].value_str.text, ((char *)create_srv.entries[create_srv.line].ptr_size));
+                        strncpy((char *)create_srv.fields[create_srv.line].value_ptr, create_srv.fields[create_srv.line].value_str.text, ((char *)create_srv.fields[create_srv.line].ptr_size));
                     }
                         break;
-                    case ENTRY_TYPE_SHORT:
+                    case FIELD_TYPE_SHORT:
                     {
                         
-                        *((short *)create_srv.entries[create_srv.line].value_ptr) = (short)atoi(create_srv.entries[create_srv.line].value_str.text);
+                        *((short *)create_srv.fields[create_srv.line].value_ptr) = (short)atoi(create_srv.fields[create_srv.line].value_str.text);
                     }
                         break;
-                    case ENTRY_TYPE_INT:
+                    case FIELD_TYPE_INT:
                     {
-                        *((int *)create_srv.entries[create_srv.line].value_ptr) = atoi(create_srv.entries[create_srv.line].value_str.text);
+                        *((int *)create_srv.fields[create_srv.line].value_ptr) = atoi(create_srv.fields[create_srv.line].value_str.text);
                     }
                         break;
-                    case ENTRY_TYPE_FLOAT:
+                    case FIELD_TYPE_FLOAT:
                     {
-                        *((float *)create_srv.entries[create_srv.line].value_ptr) = (float)atof(create_srv.entries[create_srv.line].value_str.text);
+                        *((float *)create_srv.fields[create_srv.line].value_ptr) = (float)atof(create_srv.fields[create_srv.line].value_str.text);
                     }
                         break;
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_IP:
                     {
-                        strncpy((char *)create_srv.entries[create_srv.line].value_ptr, create_srv.entries[create_srv.line].value_str.text, ((char *)create_srv.entries[create_srv.line].ptr_size));
+                        strncpy((char *)create_srv.fields[create_srv.line].value_ptr, create_srv.fields[create_srv.line].value_str.text, ((char *)create_srv.fields[create_srv.line].ptr_size));
                     }
                         break;
                     default:
@@ -3030,13 +3459,23 @@ int create_srv_wnd(int *option, char *server_name)
                     }
                     
                     wclear(create_srv.srv_info_sw);
-                    if (*((short *)create_srv.entries[1].value_ptr) == 0)
-                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, CREATE_SCR_NO_RESTR_LABEL, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                    wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_LABEL""CREATE_SCR_SINFO_SNAME, create_srv.fields[0].value_str.text);
+                    if (*((int *)create_srv.fields[2].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, CREATE_SCR_NO_RESTR_LABEL);
                     else
-                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SRV_INFO_TEMPLATE, create_srv.entries[0].value_str.text, create_srv.entries[1].value_str.text, create_srv.entries[3].value_str.text, *((short *)create_srv.entries[4].value_ptr));
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_MUSERS, create_srv.fields[1].value_str.text);
+                    
+                    if (*((int *)create_srv.fields[5].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, CREATE_SCR_LOCAL_IP_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_IP, create_srv.fields[3].value_str.text);
+                    if (*((int *)create_srv.fields[6].value_ptr) == true)
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, CREATE_SCR_AUTO_PORT_LABEL);
+                    else
+                        wprintw(create_srv.srv_info_sw, CREATE_SCR_SINFO_PORT, create_srv.fields[4].value_str.text);
 
-                    mvwhline(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
-                    mvwprintw(create_srv.entries[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], "%s", create_srv.entries[create_srv.line].value_str.text);
+                    mvwhline(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], ' ', LABEL_LEN);
+                    mvwprintw(create_srv.fields[create_srv.line].elem.wnd, 0, create_axis.fields_x[create_srv.line], "%s", create_srv.fields[create_srv.line].value_str.text);
                     _update_window();
                 }
                     break;
@@ -3053,8 +3492,7 @@ int create_srv_wnd(int *option, char *server_name)
                     {
                     case 0:
                     {
-                        strncpy(server_name, servers_info[join_srv.line].server_name, STR_LEN);
-                        // popup_wnd(server_name, POPUP_W_WAIT);
+                        strncpy(server_name, create_srv.server.server_name, STR_LEN);
                         *option = WND_CHAT;
                         run_flag = 0;
                     }
@@ -3121,9 +3559,15 @@ int cfg_wnd(int *option)
     int run_flag = 1;
     int ret = EXIT_SUCCESS;
     
-    int elems_count = sizeof(cfg_wnds.entries)/sizeof(struct entry_t);
+    int elems_count = sizeof(cfg_wnds.fields)/sizeof(struct field_t);
     cfg_dims.pad_h = cfg_dims.entry_h*elems_count + elems_count;
     cfg_wnds.line = 0;
+
+    cfg_wnds.config.id = config.id;
+    strncpy(cfg_wnds.config.name, config.name, STR_LEN);
+    cfg_wnds.config.language = config.language;
+    strncpy(cfg_wnds.config.ip, config.ip, IP_ADDR_LEN);
+    cfg_wnds.config.port = config.port;
 
     _draw_window(WND_PREFS);
 
@@ -3133,32 +3577,25 @@ int cfg_wnd(int *option)
 
         switch (symbol)
         {
-            case '\n':
-                {
-                }
-                break;
-            case '\t':
-                {
-                }
-                break;
             case KEY_UP:
                 {
                     if (cfg_wnds.line > 0)
                     {
-                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
+                        mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.fields[cfg_wnds.line].elem.lbl.text);
 
-                        switch (cfg_wnds.entries[cfg_wnds.line].type)
+                        switch (cfg_wnds.fields[cfg_wnds.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
+                        case FIELD_TYPE_ADDR:
                             curs_set(0);
                             break;
-                        case ENTRY_TYPE_OPTION:
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                        case FIELD_TYPE_OPTION:
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
                             break;
                         default:
                             break;
@@ -3166,44 +3603,43 @@ int cfg_wnd(int *option)
 
                         cfg_wnds.line--;
 
-                        wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
-                        wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.fields[cfg_wnds.line].elem.lbl.text);
+                        wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
-                        switch (cfg_wnds.entries[cfg_wnds.line].type)
+                        switch (cfg_wnds.fields[cfg_wnds.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
+                        case FIELD_TYPE_ADDR:
                         {
                             cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
-                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
                             cursor.is_set = true;
 
                             move(cursor.y, cursor.x);
-                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                             curs_set(1);
                         }
                             break;
-                        case ENTRY_TYPE_OPTION:
+                        case FIELD_TYPE_OPTION:
                         {
                             cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
                         }
                             break;
                         default:
                             break;
                         }
                     }
+                    mvwprintw(global_wnds.wnd, 0, 0, "%d:%d:%d", cfg_wnds.fields[cfg_wnds.line].selection, cfg_wnds.fields[cfg_wnds.line].value_str.str_len, cfg_wnds.fields[cfg_wnds.line].value_str.max_len);
                     _update_window();
                 }
                 break;
@@ -3211,20 +3647,21 @@ int cfg_wnd(int *option)
                 {
                     if (cfg_wnds.line < elems_count-1)
                     {
-                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
+                        mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.fields[cfg_wnds.line].elem.lbl.text);
 
-                        switch (cfg_wnds.entries[cfg_wnds.line].type)
+                        switch (cfg_wnds.fields[cfg_wnds.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
+                        case FIELD_TYPE_ADDR:
                             curs_set(0);
                             break;
-                        case ENTRY_TYPE_OPTION:
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                        case FIELD_TYPE_OPTION:
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
                             break;
                         default:
                             break;
@@ -3232,86 +3669,86 @@ int cfg_wnd(int *option)
 
                         cfg_wnds.line++;
 
-                        wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
-                        mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.entries[cfg_wnds.line].elem.lbl.text);
-                        wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
+                        mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.labels_x[cfg_wnds.line], cfg_wnds.fields[cfg_wnds.line].elem.lbl.text);
+                        wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_UNDERLINE | A_BOLD);
 
-                        switch (cfg_wnds.entries[cfg_wnds.line].type)
+                        switch (cfg_wnds.fields[cfg_wnds.line].type)
                         {
-                        case ENTRY_TYPE_STRING:
-                        case ENTRY_TYPE_SHORT:
-                        case ENTRY_TYPE_INT:
-                        case ENTRY_TYPE_FLOAT:
-                        case ENTRY_TYPE_IP:
+                        case FIELD_TYPE_STRING:
+                        case FIELD_TYPE_SHORT:
+                        case FIELD_TYPE_INT:
+                        case FIELD_TYPE_FLOAT:
+                        case FIELD_TYPE_IP:
+                        case FIELD_TYPE_ADDR:
                         {
                             cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
-                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
                             cursor.is_set = true;
 
                             move(cursor.y, cursor.x);
-                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                             curs_set(1);
                         }
                             break;
-                        case ENTRY_TYPE_OPTION:
+                        case FIELD_TYPE_OPTION:
                         {
                             cursor.is_set = false;
                             curs_set(0);
 
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
                         }
                             break;
                         default:
                             break;
                         }
+
+                        mvwprintw(global_wnds.wnd, 0, 0, "%d:%d:%d", cfg_wnds.fields[cfg_wnds.line].selection, cfg_wnds.fields[cfg_wnds.line].value_str.str_len, cfg_wnds.fields[cfg_wnds.line].value_str.max_len);
                         _update_window();
                     }
                 }
                 break;
             case KEY_LEFT:
                 {
-                    switch (cfg_wnds.entries[cfg_wnds.line].type)
+                    switch (cfg_wnds.fields[cfg_wnds.line].type)
                     {
-                    case ENTRY_TYPE_STRING:
-                    case ENTRY_TYPE_SHORT:
-                    case ENTRY_TYPE_INT:
-                    case ENTRY_TYPE_FLOAT:
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_STRING:
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
+                    case FIELD_TYPE_FLOAT:
+                    case FIELD_TYPE_IP:
+                    case FIELD_TYPE_ADDR:
                     {
-                        
-                        if (cfg_wnds.entries[cfg_wnds.line].selection > 0)
+                        if (cfg_wnds.fields[cfg_wnds.line].selection > 0)
                         {
-                            cfg_wnds.entries[cfg_wnds.line].selection--;
+                            cfg_wnds.fields[cfg_wnds.line].selection--;
                             cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
-                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
 
                             move(cursor.y, cursor.x);
-                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                         }
                     }
                         break;
-                    case ENTRY_TYPE_OPTION:
+                    case FIELD_TYPE_OPTION:
                     {
-                        if (cfg_wnds.entries[cfg_wnds.line].selection > 0)
+                        if (cfg_wnds.fields[cfg_wnds.line].selection > 0)
                         {
-                            cfg_wnds.entries[cfg_wnds.line].selection--;
+                            cfg_wnds.fields[cfg_wnds.line].selection--;
                             
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
 
-                            mvwhline(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
-                            mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+((LABEL_LEN-cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].str_len)/2), "%s", cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].option);
+                            mvwhline(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
+                            mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+((LABEL_LEN-cfg_wnds.fields[cfg_wnds.line].value_list.options[cfg_wnds.fields[cfg_wnds.line].selection].str_len)/2), "%s", cfg_wnds.fields[cfg_wnds.line].value_list.options[cfg_wnds.fields[cfg_wnds.line].selection].option);
 
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+
+                            *((int *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = cfg_wnds.fields[cfg_wnds.line].value_list.options[cfg_wnds.fields[cfg_wnds.line].selection].value;
                         }
                     }
                         break;
@@ -3323,42 +3760,45 @@ int cfg_wnd(int *option)
                 break;
             case KEY_RIGHT:
                 {
-                    switch (cfg_wnds.entries[cfg_wnds.line].type)
+                    switch (cfg_wnds.fields[cfg_wnds.line].type)
                     {
-                    case ENTRY_TYPE_STRING:
-                    case ENTRY_TYPE_SHORT:
-                    case ENTRY_TYPE_INT:
-                    case ENTRY_TYPE_FLOAT:
-                    case ENTRY_TYPE_IP:
+                    case FIELD_TYPE_STRING:
+                    case FIELD_TYPE_SHORT:
+                    case FIELD_TYPE_INT:
+                    case FIELD_TYPE_FLOAT:
+                    case FIELD_TYPE_IP:
+                    case FIELD_TYPE_ADDR:
                     {
-                        if (cfg_wnds.entries[cfg_wnds.line].selection < cfg_wnds.entries[cfg_wnds.line].value_str.str_len)
+                        if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.str_len)
                         {
-                            cfg_wnds.entries[cfg_wnds.line].selection++;
+                            cfg_wnds.fields[cfg_wnds.line].selection++;
                             cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
-                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection;
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
                             
                             move(cursor.y, cursor.x);
-                            // move(cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line], cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.entries[cfg_wnds.line].selection);
                         }
                     }
-                        
                         break;
-                    case ENTRY_TYPE_OPTION:
-                        if (cfg_wnds.entries[cfg_wnds.line].selection < cfg_wnds.entries[cfg_wnds.line].value_list.size-1)
+                    case FIELD_TYPE_OPTION:
+                    {
+                        if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_list.size-1)
                         {
-                            cfg_wnds.entries[cfg_wnds.line].selection++;
+                            cfg_wnds.fields[cfg_wnds.line].selection++;
                             
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]-1, '<');
+                            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
 
-                            mvwhline(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
-                            mvwprintw(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+((LABEL_LEN-cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].str_len)/2), "%s", cfg_wnds.entries[cfg_wnds.line].value_list.options[cfg_wnds.entries[cfg_wnds.line].selection].option);
+                            mvwhline(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
+                            mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+((LABEL_LEN-cfg_wnds.fields[cfg_wnds.line].value_list.options[cfg_wnds.fields[cfg_wnds.line].selection].str_len)/2), "%s", cfg_wnds.fields[cfg_wnds.line].value_list.options[cfg_wnds.fields[cfg_wnds.line].selection].option);
 
-                            wattron(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
-                            mvwaddch(cfg_wnds.entries[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
-                            wattroff(cfg_wnds.entries[cfg_wnds.line].elem.wnd, A_BOLD);
+                            wattron(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+                            mvwaddch(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line]+LABEL_LEN, '>');
+                            wattroff(cfg_wnds.fields[cfg_wnds.line].elem.wnd, A_BOLD);
+
+                            *((int *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = cfg_wnds.fields[cfg_wnds.line].value_list.options[cfg_wnds.fields[cfg_wnds.line].selection].value;
                         }
+                    }
                         break;
                     default:
                         break;
@@ -3386,10 +3826,268 @@ int cfg_wnd(int *option)
                     run_flag = 0;
                 }
                 break;
+            case KEY_BACKSPACE:
+            {
+                switch (cfg_wnds.fields[cfg_wnds.line].type)
+                {
+                case FIELD_TYPE_STRING:
+                case FIELD_TYPE_IP:
+                case FIELD_TYPE_ADDR:
+                {
+                    if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len <= 0)
+                        break;
+
+                    if (cfg_wnds.fields[cfg_wnds.line].selection >= cfg_wnds.fields[cfg_wnds.line].value_str.max_len)
+                        break;
+
+                    _remove_char_at(cfg_wnds.fields[cfg_wnds.line].value_str.text, cfg_wnds.fields[cfg_wnds.line].value_str.max_len, cfg_wnds.fields[cfg_wnds.line].selection-1);
+
+                    if (cfg_wnds.fields[cfg_wnds.line].selection > 0)
+                    {
+                        cfg_wnds.fields[cfg_wnds.line].selection--;
+                        cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                        cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
+
+                        move(cursor.y, cursor.x);
+                    }
+
+                    if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len > 0)
+                        cfg_wnds.fields[cfg_wnds.line].value_str.str_len--;
+
+                    strncpy((char *)cfg_wnds.fields[cfg_wnds.line].value_ptr, cfg_wnds.fields[cfg_wnds.line].value_str.text, ((char *)cfg_wnds.fields[cfg_wnds.line].ptr_size));
+                }
+                    break;
+                case FIELD_TYPE_SHORT:
+                case FIELD_TYPE_INT:
+                case FIELD_TYPE_FLOAT:
+                {
+                    int tmp;
+
+                    if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len <= 0)
+                        break;
+
+                    if (cfg_wnds.fields[cfg_wnds.line].selection >= cfg_wnds.fields[cfg_wnds.line].value_str.max_len)
+                        break;
+
+                    _remove_char_at(cfg_wnds.fields[cfg_wnds.line].value_str.text, cfg_wnds.fields[cfg_wnds.line].value_str.max_len, cfg_wnds.fields[cfg_wnds.line].selection-1);
+
+                    if (cfg_wnds.fields[cfg_wnds.line].selection > 0)
+                    {
+                        cfg_wnds.fields[cfg_wnds.line].selection--;
+                        cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                        cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
+
+                        move(cursor.y, cursor.x);
+                    }
+
+                    if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len > 0)
+                        cfg_wnds.fields[cfg_wnds.line].value_str.str_len--;
+
+                    switch (cfg_wnds.fields[cfg_wnds.line].type)
+                    {
+                    case FIELD_TYPE_SHORT:
+                    {
+                        *((short *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = (short)atoi(cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                        tmp = (int)*((short *)cfg_wnds.fields[cfg_wnds.line].value_ptr);
+                    }
+                        break;
+                    case FIELD_TYPE_INT:
+                    {
+                        *((int *)create_srv.fields[create_srv.line].value_ptr) = atoi(create_srv.fields[create_srv.line].value_str.text);
+                        tmp = *((int *)create_srv.fields[create_srv.line].value_ptr);
+                    }
+                        break;
+                    case FIELD_TYPE_FLOAT:
+                    {
+                        *((float *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = (float)atof(cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                        if (*((float *)cfg_wnds.fields[cfg_wnds.line].value_ptr) > 0 && *((float *)cfg_wnds.fields[cfg_wnds.line].value_ptr) < 1)
+                            tmp = 1;
+                        else
+                            tmp = (int)*((float *)cfg_wnds.fields[cfg_wnds.line].value_ptr);
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                    break;
+                default:
+                    break;
+                }
+
+                mvwhline(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
+                mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], "%s", cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                _update_window();
+            }
+                break;
             default:
-            break;
+            {
+                if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len == cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                    break;
+
+                switch (cfg_wnds.fields[cfg_wnds.line].type)
+                {
+                case FIELD_TYPE_STRING:
+                {
+                    if (symbol > 0x1F && symbol < 0x7F)
+                    {
+                        if (cfg_wnds.fields[cfg_wnds.line].selection == cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1 || cfg_wnds.fields[cfg_wnds.line].value_str.str_len == 0)
+                        {
+                            cfg_wnds.fields[cfg_wnds.line].value_str.text[cfg_wnds.fields[cfg_wnds.line].selection] = (char)symbol;
+                        }
+                        else if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                        {
+                            _put_char_at(cfg_wnds.fields[cfg_wnds.line].value_str.text, cfg_wnds.fields[cfg_wnds.line].value_str.max_len, (char)symbol, cfg_wnds.fields[cfg_wnds.line].selection);
+                        }
+
+                        if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                        {
+                            cfg_wnds.fields[cfg_wnds.line].selection++;
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
+
+                            move(cursor.y, cursor.x);
+                        }
+
+                        if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len != cfg_wnds.fields[cfg_wnds.line].value_str.max_len)
+                            cfg_wnds.fields[cfg_wnds.line].value_str.str_len++;
+                    }
+                }
+                    break;
+                case FIELD_TYPE_SHORT:
+                case FIELD_TYPE_INT:
+                {
+                    switch (symbol)
+                    {
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                    {
+                        if (cfg_wnds.fields[cfg_wnds.line].selection == cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1 || cfg_wnds.fields[cfg_wnds.line].value_str.str_len == 0)
+                        {
+                            cfg_wnds.fields[cfg_wnds.line].value_str.text[cfg_wnds.fields[cfg_wnds.line].selection] = (char)symbol;
+                        }
+                        else if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                        {
+                            _put_char_at(cfg_wnds.fields[cfg_wnds.line].value_str.text, cfg_wnds.fields[cfg_wnds.line].value_str.max_len, (char)symbol, cfg_wnds.fields[cfg_wnds.line].selection);
+                        }
+
+                        if (create_srv.fields[create_srv.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                        {
+                            cfg_wnds.fields[cfg_wnds.line].selection++;
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
+
+                            move(cursor.y, cursor.x);
+                        }
+
+                        if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len != cfg_wnds.fields[cfg_wnds.line].value_str.max_len)
+                            cfg_wnds.fields[cfg_wnds.line].value_str.str_len++;
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                    break;
+                case FIELD_TYPE_FLOAT:
+                case FIELD_TYPE_IP:
+                {
+                    switch (symbol)
+                    {
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                    case '.':
+                    {
+                        if (cfg_wnds.fields[cfg_wnds.line].selection == cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1 || cfg_wnds.fields[cfg_wnds.line].value_str.str_len == 0)
+                        {
+                            cfg_wnds.fields[cfg_wnds.line].value_str.text[cfg_wnds.fields[cfg_wnds.line].selection] = (char)symbol;
+                        }
+                        else if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                        {
+                            _put_char_at(cfg_wnds.fields[cfg_wnds.line].value_str.text, cfg_wnds.fields[cfg_wnds.line].value_str.max_len, (char)symbol, cfg_wnds.fields[cfg_wnds.line].selection);
+                        }
+
+                        if (cfg_wnds.fields[cfg_wnds.line].selection < cfg_wnds.fields[cfg_wnds.line].value_str.max_len-1)
+                        {
+                            cfg_wnds.fields[cfg_wnds.line].selection++;
+                            cursor.y = cfg_axis.vis_pad_ys+cfg_axis.entries_y[cfg_wnds.line];
+                            cursor.x = cfg_axis.vis_pad_xs+cfg_axis.entries_x[cfg_wnds.line]+cfg_axis.fields_x[cfg_wnds.line]+cfg_wnds.fields[cfg_wnds.line].selection;
+
+                            move(cursor.y, cursor.x);
+                        }
+
+                        if (cfg_wnds.fields[cfg_wnds.line].value_str.str_len != cfg_wnds.fields[cfg_wnds.line].value_str.max_len)
+                            cfg_wnds.fields[cfg_wnds.line].value_str.str_len++;
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                    break;
+                default:
+                    break;
+                }
+
+                switch (cfg_wnds.fields[cfg_wnds.line].type)
+                {
+                case FIELD_TYPE_STRING:
+                case FIELD_TYPE_IP:
+                case FIELD_TYPE_ADDR:
+                {
+                    strncpy((char *)cfg_wnds.fields[cfg_wnds.line].value_ptr, cfg_wnds.fields[cfg_wnds.line].value_str.text, ((char *)cfg_wnds.fields[cfg_wnds.line].ptr_size));
+                }
+                    break;
+                case FIELD_TYPE_SHORT:
+                {
+                        
+                    *((short *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = (short)atoi(cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                }
+                    break;
+                case FIELD_TYPE_INT:
+                {
+                    *((int *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = atoi(cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                }
+                    break;
+                case FIELD_TYPE_FLOAT:
+                {
+                    *((float *)cfg_wnds.fields[cfg_wnds.line].value_ptr) = (float)atof(cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                }
+                    break;
+                default:
+                    break;
+                }
+
+                mvwhline(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], ' ', LABEL_LEN);
+                mvwprintw(cfg_wnds.fields[cfg_wnds.line].elem.wnd, 0, cfg_axis.fields_x[cfg_wnds.line], "%s", cfg_wnds.fields[cfg_wnds.line].value_str.text);
+                _update_window();
+            }
+                break;
         }
     }
+
+    ret += modify_config_entry(ENTRY_USERNAME, cfg_wnds.config.name);
+    ret += modify_config_entry(ENTRY_LANGUAGE, &cfg_wnds.config.language);
+    ret += modify_config_entry(ENTRY_IP, cfg_wnds.config.ip);
+    ret += modify_config_entry(ENTRY_PORT, &cfg_wnds.config.port);
+
+    ret += update_json_file();
 
     _delete_window();
     _free_memory(cur_wnd);
