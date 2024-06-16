@@ -11,6 +11,7 @@
 
 extern struct config_t config;
 extern int connection_flag;
+extern timer_t timer_id;
 extern struct pollfd pfd;
 mqd_t mqd = 0;
 int mq_comm = 0;
@@ -53,6 +54,13 @@ static void sigusr1_handler(int sig, siginfo_t *si, void *unused)
     return;
 }
 
+static void sigusr2_handler(int sig, siginfo_t *si, void *unused)
+{
+    timer_delete(timer_id);
+
+    return;
+}
+
 void *_net_thread(void *args)
 {
     int ret = EXIT_SUCCESS;
@@ -77,40 +85,25 @@ void *_net_thread(void *args)
         switch (connection_flag)
         {
         case STATUS_CONNECTED:
-            if (poll(&pfd, 1, 0) > 0)
+        if (poll(&pfd, 1, 0) > 0)
+        {
+            if (pfd.revents & POLLIN)
             {
-                if (pfd.revents & POLLIN)
-                {
-                    if (client_recv(NULL, RECV_TIMEOUT) != 0)
+                if (client_recv(NULL, RECV_TIMEOUT) != 0)
                     {
-                        popup_wnd(strerror(errno), POPUP_W_WAIT);
+                    popup_wnd(strerror(errno), POPUP_W_WAIT);
+                    connection_flag = STATUS_DISCONNECTED;
+                    if (errno == ECONNRESET)
+                    {
                         connection_flag = STATUS_DISCONNECTED;
-                        if (errno == ECONNRESET)
-                        {
-                            connection_flag = STATUS_DISCONNECTED;
-                            // popup_wnd(strerror(errno), POPUP_W_WAIT);
-                            // TODO Add dynamic status change on window upon losing connection with main server
-                            mq_comm = CONNECT_COMM;
-                            mq_send(mqd, &mq_comm, sizeof(int), NULL);
-                            
-                        }
-                        // switch (is_connected())
-                        // {
-                        // case STATUS_DISCONNECTED:
-                        //     if (kill(getpid(), SIGUSR1) != 0)
-                        //     {
-                        //         perror("kill");
-                        //         exit(EXIT_FAILURE);
-                        //     }
-                        //     break;
-                        // default:
-                        //     break;
-                        // }
-                        
+                        // TODO Add dynamic status change on window upon losing connection with main server
+                        mq_comm = CONNECT_COMM;
+                        mq_send(mqd, &mq_comm, sizeof(int), NULL);
                     }
                 }
-                pfd.revents = 0;
             }
+            pfd.revents = 0;
+        }
             break;
         default:
             break;
@@ -121,7 +114,9 @@ void *_net_thread(void *args)
 int main(void)
 {
     pthread_t tid;
-    struct sigaction sa;
+    struct sigaction sa_alrm;
+    struct sigaction sa_usr1;
+    struct sigaction sa_usr2;
     char mq_name[23];
     struct mq_attr attr;
     struct sigevent sev;
@@ -129,27 +124,41 @@ int main(void)
     char server_name[STR_LEN+1];
     int run_flag = 1;
     int ret = EXIT_SUCCESS;
-    // init_graphics();
-    // chat_wnd(&option, "Test chat lalalalala");
+    init_graphics();
+    // menu_wnd(&option);
+    // popup_wnd("pop wait\nSample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text123 adfiygbqbe i qbfeq iifqe fgqeib viygdziyvgwrvb iuadgv biqv !@#??", POPUP_W_BLOCK);
+    // popup_wnd("pop wait", POPUP_W_BLOCK);
+    chat_wnd(&option, "Test chat lalalalala");
+    // popup_wnd("pop wait", POPUP_W_BLOCK);
+    // popup_wnd("Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text", POPUP_W_BLOCK);
     // menu_wnd(&option);
     // option = 1;
     // join_srv_wnd(&option);
     // option = 1;
     // create_srv_wnd(&option);
     // prefs_wnd();
-    // deinit_graphics();
-    // return 0;
-    sigfillset(&sa.sa_mask);
-    sa.sa_sigaction = sigalrm_handler;
-    if (sigaction(SIGALRM, &sa, NULL) == -1)
+    deinit_graphics();
+    return 0;
+    
+    sigfillset(&sa_alrm.sa_mask);
+    sa_alrm.sa_sigaction = sigalrm_handler;
+    if (sigaction(SIGALRM, &sa_alrm, NULL) == -1)
     {
         perror("sigaction");
         exit(EXIT_FAILURE);
     }
 
-    sigfillset(&sa.sa_mask);
-    sa.sa_sigaction = sigusr1_handler;
-    if (sigaction(SIGUSR1, &sa, NULL) == -1)
+    sigfillset(&sa_usr1.sa_mask);
+    sa_usr1.sa_sigaction = sigusr1_handler;
+    if (sigaction(SIGUSR1, &sa_usr1, NULL) == -1)
+    {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
+    sigfillset(&sa_usr2.sa_mask);
+    sa_usr2.sa_sigaction = sigusr2_handler;
+    if (sigaction(SIGUSR2, &sa_usr2, NULL) == -1)
     {
         perror("sigaction");
         exit(EXIT_FAILURE);
@@ -228,38 +237,6 @@ int main(void)
         {
             break;
         }
-        
-        // switch (option)
-        // {
-        //     case 1:
-        //         if (connection_flag)
-        //         {
-        //             ret = join_srv_wnd(&option);
-        //         }
-        //         else
-        //         {
-        //             popup_wnd("Not connected", POPUP_W_WAIT);
-        //         }
-        //         break;
-        //     case 2:
-        //         if (connection_flag)
-        //         {
-        //             ret = create_srv_wnd(&option);
-        //         }
-        //         else
-        //         {
-        //             popup_wnd("Not connected", POPUP_W_WAIT);
-        //         }
-        //         break;
-        //     case 3:
-        //         ret = prefs_wnd(&option);
-        //         break;
-        //     case -1:
-        //         /* code */
-        //         break;
-        //     default:
-        //         break;
-        // }
     }
     
     pthread_cancel(tid);

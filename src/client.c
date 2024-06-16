@@ -23,10 +23,17 @@ struct requests_t requests = {
 };
 
 int connection_flag = STATUS_DISCONNECTED;
+timer_t timer_id = NULL;
 
 int connect_to_main_server(int *fd)
 {
     struct client_msg_t msg;
+    struct timeval st, et;
+    struct sigevent sev;
+    struct itimerspec its;
+    long long timer_val;
+    int st_mcs, et_mcs, elapsed_mcs;
+    float sleep_mcs;
 	struct timespec ts;
 
     int index;
@@ -35,6 +42,19 @@ int connect_to_main_server(int *fd)
 	/* Set 'ts' time to define-constants */
 	ts.tv_sec = NET_RECV_RETRY_PAUSE_SEC;
 	ts.tv_nsec = NET_RECV_RETRY_PAUSE_NSEC;
+
+    sleep_mcs = (NET_RECV_RETRY_PAUSE_SEC * 1000000) + (NET_RECV_RETRY_PAUSE_NSEC*0.001);
+
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = SIGUSR2;
+    sev.sigev_value.sival_ptr = &timer_id;
+
+    timer_val = ((NET_RECV_RETRY_PAUSE_SEC * 1000000000) + NET_RECV_RETRY_PAUSE_NSEC) * NET_RECV_RETRIES;
+    its.it_value.tv_sec = timer_val / 1000000000;
+    its.it_value.tv_nsec = timer_val % 1000000000;
+    its.it_interval.tv_sec = its.it_value.tv_sec; // 0;
+    its.it_interval.tv_nsec = its.it_value.tv_nsec; // 100000;
+
 
 	/* Fill 'server' with 0's */
 	memset(&server, 0, sizeof(server));
@@ -58,14 +78,30 @@ int connect_to_main_server(int *fd)
         return EXIT_FAILURE;
     }
 
+    gettimeofday(&st, NULL);
+    st_mcs = (st.tv_sec * 1000000) + st.tv_usec;
+
+    if (timer_create(CLOCK_MONOTONIC, &sev, &timer_id) == -1)
+        timer_id = NULL;
+    else
+        timer_settime(timer_id, 0, &its, NULL);
+
+    // timer_create
 	for (index = 0; index < NET_RECV_RETRIES; ++index)
 	{
 		if (connect(pfd.fd, (struct sockaddr *)&server, sizeof(server))
 			== -1)
 		{
+            gettimeofday(&et, NULL);
+            et_mcs =  (et.tv_sec * 1000000) + et.tv_usec;
+            elapsed_mcs = et_mcs - st_mcs;
+            if (elapsed_mcs > sleep_mcs)
+            {
+                index += (int)(elapsed_mcs / sleep_mcs)+1;
+            }
             // printf("connect: %s(%d)\n", strerror(errno), errno);
 			if ((errno != ECONNREFUSED && errno != ENOENT) ||
-				index == (NET_RECV_RETRIES - 1))
+				index >= (NET_RECV_RETRIES - 1))
 			{
 				return EXIT_FAILURE;
 			}

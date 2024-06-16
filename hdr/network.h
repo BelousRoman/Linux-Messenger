@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdatomic.h>
 #include <unistd.h>
+#include <signal.h>
+#include <time.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -16,7 +18,6 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <semaphore.h>
-#include <signal.h>
 #include <mqueue.h>
 
 #include "configurator.h"
@@ -28,8 +29,10 @@
 #define NET_SOFTWARE_ERR                1
 
 #define NET_RECV_RETRY_PAUSE_SEC        0
-#define NET_RECV_RETRY_PAUSE_NSEC       10000000
-#define NET_RECV_RETRIES                1
+#define NET_RECV_RETRY_PAUSE_NSEC       50000000
+#define NET_RECV_RETRIES                10
+
+#define CHAT_MSG_LEN                    1024
 
 enum connection_status
 {

@@ -155,13 +155,14 @@ enum field_type
     FIELD_TYPE_ADDR
 };
 
-struct label_t
+struct dyn_str_t
 {
     int size;
+    int str_len;
     char *text;
 };
 
-struct string_t
+struct st_str_t
 {
     int max_len;
     int str_len;
@@ -170,19 +171,19 @@ struct string_t
 
 struct note_labels_t
 {
-    struct label_t mmenu_connected;
-    struct label_t mmenu_disconnected;
-    struct label_t mmenu_connecting;
-    struct label_t join_srv;
-    struct label_t create_srv;
-    struct label_t prefs_wnd;
-    struct label_t chat_wnd;
+    struct dyn_str_t mmenu_connected;
+    struct dyn_str_t mmenu_disconnected;
+    struct dyn_str_t mmenu_connecting;
+    struct dyn_str_t join_srv;
+    struct dyn_str_t create_srv;
+    struct dyn_str_t prefs_wnd;
+    struct dyn_str_t chat_wnd;
 };
 
 struct elem_wnd_t
 {
     WINDOW *wnd;
-    struct label_t lbl;
+    struct dyn_str_t lbl;
 };
 
 struct option_t
@@ -208,20 +209,22 @@ struct field_t
     union
     {
         struct list_t value_list;
-        struct string_t value_str;
+        struct st_str_t value_str;
     };
 };
 
 struct textbox_t
 {
-    char *str;
-    int max_len;
-    int str_len;
-    int str_index;
-    int lines;
+    struct dyn_str_t str;
+    int rows;
     int *cols;
-    int y;
-    int x;
+    int *indexes;
+    int *syms_left;
+    int tb_syms_left;
+    int max_col;
+    int row;
+    int col;
+    int index;
 };
 
 struct cursor_t
@@ -259,6 +262,26 @@ struct global_wnds_t
     WINDOW *wnd;
     WINDOW *note_w;
     WINDOW *note_sw;
+};
+
+struct popup_dims_t
+{
+    int wnd_h;
+    int wnd_w;
+    int subwnd_h;
+    int subwnd_w;
+    int wnd_max_h;
+    int wnd_max_w;
+    int sw_h_offset;
+    int sw_v_offset;
+    int subwnd_max_h;
+    int subwnd_max_w;
+};
+
+struct popup_wnds_t
+{
+    WINDOW *wnd;
+    WINDOW *subwnd;
 };
 
 struct mmenu_dims_t

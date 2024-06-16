@@ -14,6 +14,7 @@ int cur_wnd = WND_NONE;
 struct cursor_t cursor = {0, 0, false};
 
 struct global_dims_t global_dims;
+struct popup_dims_t popup_dims;
 struct mmenu_dims_t mmenu_dims;
 struct join_dims_t join_dims;
 struct create_dims_t create_dims;
@@ -28,6 +29,7 @@ struct cfg_axis_t cfg_axis;
 struct chat_axis_t chat_axis;
 
 struct global_wnds_t global_wnds;
+struct popup_wnds_t popup_wnds;
 struct mmenu_wnd_t main_menu;
 struct join_wnd_t join_srv;
 struct create_wnd_t create_srv;
@@ -157,7 +159,7 @@ void handle_msg(union sigval sv)
 	return EXIT_SUCCESS;
 }
 
-int _set_string(struct label_t *lbl, char *str)
+int _set_string(struct dyn_str_t *lbl, char *str)
 {
     char *tmp_label = NULL;
     int tmp_size = 0;
@@ -279,6 +281,17 @@ int _set_dimensions()
         global_dims.note_w = global_dims.wnd_w;
 
         global_dims.h_spacer = 4;
+    }
+
+    /* Set dimensions that are used in popup window */
+    {
+        popup_dims.wnd_max_h = global_dims.wnd_h;
+        popup_dims.wnd_max_w = global_dims.wnd_w;
+        popup_dims.sw_h_offset = 6;
+        popup_dims.sw_v_offset = 0;
+        popup_dims.subwnd_max_h = popup_dims.wnd_max_h - 2 - (popup_dims.sw_v_offset*2);
+        popup_dims.subwnd_max_w = popup_dims.wnd_max_w - 2 - (popup_dims.sw_h_offset*2);
+        // popup_dims.subwnd_max_w = 15;
     }
 
     /* Set dimensions that are used in main menu window */
@@ -404,8 +417,9 @@ int _set_dimensions()
 
         chat_dims.vis_pad_h[0] = chat_dims.tb_h - 2;
         chat_dims.vis_pad_w[0] = chat_dims.tb_w - 2;
-        chat_dims.pad_h[0] = chat_dims.vis_pad_h[0];
         chat_dims.pad_w[0] = chat_dims.vis_pad_w[0];
+        chat_dims.pad_h[0] = (CHAT_MSG_LEN / chat_dims.vis_pad_w[0])+1;
+        chat_dims.pad_h[0] = chat_dims.pad_h[0] > chat_dims.vis_pad_h[0]? chat_dims.pad_h[0] : chat_dims.vis_pad_h[0];
 
         chat_dims.vis_pad_h[1] = chat_dims.msg_h - 2;
         chat_dims.vis_pad_w[1] = chat_dims.msg_w - 2;
@@ -1500,32 +1514,180 @@ int _draw_window(int wnd_type)
         {
             if (cur_wnd == WND_NONE)
             {
-                chat_wnds.tb.max_len = (chat_dims.tb_h-2) * (chat_dims.tb_w-2);
-                chat_wnds.tb.str = malloc(sizeof(char)*chat_wnds.tb.max_len+1);
-                if (chat_wnds.tb.str != NULL)
+                chat_wnds.tb.str.size = CHAT_MSG_LEN;
+                chat_wnds.tb.str.text = malloc(sizeof(char)*chat_wnds.tb.str.size+1);
+                if (chat_wnds.tb.str.text != NULL)
                 {
-                    memset(chat_wnds.tb.str, NULL, sizeof(char)*chat_wnds.tb.max_len+1);
+                    memset(chat_wnds.tb.str.text, NULL, sizeof(char)*chat_wnds.tb.str.size);
+                    // snprintf(chat_wnds.tb.str.text, chat_wnds.tb.str.size, "Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text");
+                    //snprintf(chat_wnds.tb.str.text, chat_wnds.tb.str.size, "Sa\nmple text Sample text Sample \ntext Sample text Sample text\n Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample text Sample te\nxt Sample text");
+                    snprintf(chat_wnds.tb.str.text, chat_wnds.tb.str.size, "Text\nQwerty");
+                    // snprintf(chat_wnds.tb.str.text, chat_wnds.tb.str.size, "Sa\nmple t\next\nTxt\nSample text!!!123\nT");
                 }
-                chat_wnds.tb.lines = 1;
-                chat_wnds.tb.cols = malloc(sizeof(int)*chat_wnds.tb.lines);
-                if (chat_wnds.tb.cols != NULL)
+
+                chat_wnds.tb.str.str_len = strlen(chat_wnds.tb.str.text);
+                chat_wnds.tb.index = chat_wnds.tb.str.str_len;
+                chat_wnds.tb.row = 0;
+                chat_wnds.tb.col = 0;
+
+                chat_wnds.tb.rows = chat_dims.tb_h-2;
+                chat_wnds.tb.cols = malloc(sizeof(int)*chat_wnds.tb.rows);
+                chat_wnds.tb.indexes = malloc(sizeof(int)*chat_wnds.tb.rows);
+                chat_wnds.tb.syms_left = malloc(sizeof(int)*chat_wnds.tb.rows);
+                chat_wnds.tb.tb_syms_left = 0;
+                chat_wnds.tb.max_col = chat_dims.tb_w-1;
+
+                if (chat_wnds.tb.cols == NULL)
+                    return EXIT_FAILURE;
+                    
+                if (chat_wnds.tb.indexes == NULL)
+                    return EXIT_FAILURE;
+
+                for (index = 0; index < chat_wnds.tb.rows; ++index)
                 {
-                    for (index = 0; index < chat_wnds.tb.lines; ++index)
+                    chat_wnds.tb.cols[index] = 0;
+                    chat_wnds.tb.indexes[index] = 0;
+                    chat_wnds.tb.syms_left[index] = (chat_wnds.tb.max_col-1);
+                }
+
+                if (chat_wnds.tb.str.str_len > 0)
+                {
+                    char *ptr = NULL;
+
+                    ptr = strchr(chat_wnds.tb.str.text, '\n');
+                    if (ptr != NULL)
                     {
-                        chat_wnds.tb.cols[0] = 0;
+                        while(ptr != NULL)
+                            {
+                            // chat_wnds.tb.cols[chat_wnds.tb.row] = (int)ptr-(int)chat_wnds.tb.str.text+1;
+                            if (chat_wnds.tb.row >= chat_wnds.tb.rows-1)
+                            {
+                                // chat_wnds.tb.col = (chat_wnds.tb.max_col-1);
+                                break;
+                            }
+
+                            chat_wnds.tb.row++;
+                            chat_wnds.tb.indexes[chat_wnds.tb.row] = (int)ptr-(int)chat_wnds.tb.str.text+1;
+                            chat_wnds.tb.cols[chat_wnds.tb.row-1] = chat_wnds.tb.indexes[chat_wnds.tb.row] - chat_wnds.tb.indexes[chat_wnds.tb.row-1];
+                            chat_wnds.tb.syms_left[chat_wnds.tb.row-1] = 0;
+
+                            if (chat_wnds.tb.cols[chat_wnds.tb.row-1] > (chat_wnds.tb.max_col-1))
+                            {
+                                while ((chat_wnds.tb.indexes[chat_wnds.tb.row] - chat_wnds.tb.indexes[chat_wnds.tb.row-1]) > (chat_wnds.tb.max_col-1))
+                                {
+                                    if (chat_wnds.tb.row == chat_wnds.tb.rows-1)
+                                    {   // possibly, that's it for this branch
+                                        chat_wnds.tb.indexes[chat_wnds.tb.row] = chat_wnds.tb.indexes[chat_wnds.tb.row] + (chat_wnds.tb.max_col-1);
+                                        chat_wnds.tb.cols[chat_wnds.tb.row-1] = (chat_wnds.tb.max_col-1);
+                                        break;
+                                    }
+
+                                    chat_wnds.tb.row++;
+                                    chat_wnds.tb.indexes[chat_wnds.tb.row] = chat_wnds.tb.indexes[chat_wnds.tb.row-1];
+                                    chat_wnds.tb.indexes[chat_wnds.tb.row-1] = chat_wnds.tb.indexes[chat_wnds.tb.row-2] + (chat_wnds.tb.max_col-1);
+
+                                    // this lines might cause errors
+                                    chat_wnds.tb.cols[chat_wnds.tb.row-1] = chat_wnds.tb.indexes[chat_wnds.tb.row] - chat_wnds.tb.indexes[chat_wnds.tb.row-1];
+                                    chat_wnds.tb.cols[chat_wnds.tb.row-2] = chat_wnds.tb.indexes[chat_wnds.tb.row-1] - chat_wnds.tb.indexes[chat_wnds.tb.row-2];
+
+                                    chat_wnds.tb.syms_left[chat_wnds.tb.row-1] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[chat_wnds.tb.row-1];
+                                    chat_wnds.tb.syms_left[chat_wnds.tb.row-2] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[chat_wnds.tb.row-2];
+                                }
+                            }
+                            ptr = strchr(&chat_wnds.tb.str.text[chat_wnds.tb.indexes[chat_wnds.tb.row]], '\n');
+                        } // ptr-chat_wnds.tb.str.text
                     }
+
+                    chat_wnds.tb.cols[chat_wnds.tb.row] = chat_wnds.tb.str.str_len - chat_wnds.tb.indexes[chat_wnds.tb.row];
+                    chat_wnds.tb.syms_left[chat_wnds.tb.row] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[chat_wnds.tb.row];
+                    chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row];
+
+                    if (chat_wnds.tb.cols[chat_wnds.tb.row] > (chat_wnds.tb.max_col-1))
+                    {
+                        while (chat_wnds.tb.cols[chat_wnds.tb.row] > (chat_wnds.tb.max_col-1))
+                        {
+                            if (chat_wnds.tb.row == chat_wnds.tb.rows-1)
+                            {
+                                chat_wnds.tb.cols[chat_wnds.tb.row] = (chat_wnds.tb.max_col-1);
+                                chat_wnds.tb.syms_left[chat_wnds.tb.row] = 0;
+                                chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row];
+
+                                break;
+                            }
+
+                            chat_wnds.tb.row++;
+                            // chat_wnds.tb.indexes[chat_wnds.tb.row] = chat_wnds.tb.indexes[chat_wnds.tb.row-1];
+                            chat_wnds.tb.indexes[chat_wnds.tb.row] = chat_wnds.tb.indexes[chat_wnds.tb.row-1] + (chat_wnds.tb.max_col-1);
+                            chat_wnds.tb.cols[chat_wnds.tb.row-1] = chat_wnds.tb.indexes[chat_wnds.tb.row] - chat_wnds.tb.indexes[chat_wnds.tb.row-1];
+                            chat_wnds.tb.syms_left[chat_wnds.tb.row-1] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[chat_wnds.tb.row-1]; // or 0
+
+                            chat_wnds.tb.cols[chat_wnds.tb.row] = chat_wnds.tb.str.str_len - chat_wnds.tb.indexes[chat_wnds.tb.row];
+                            chat_wnds.tb.syms_left[chat_wnds.tb.row] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[chat_wnds.tb.row]; // or 0
+                        }
+                        chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row];
+                    }
+
+                    for (index = 0; index < chat_wnds.tb.rows; ++index)
+                        chat_wnds.tb.tb_syms_left += chat_wnds.tb.syms_left[index];
                 }
             }
+            else // TODO: Finish this branch logic
+            {
+                if (chat_wnds.tb.rows != (chat_dims.tb_h-2))
+                {
+                    int *tmp;
 
+                    tmp = realloc(chat_wnds.tb.cols, chat_dims.tb_h-2);
+                    if (tmp != NULL)
+                    {
+                        chat_wnds.tb.cols = tmp;
+
+                        for (index = chat_wnds.tb.rows; index < chat_dims.tb_h-2; ++index)
+                        {
+                            chat_wnds.tb.cols[index] = 0;
+                        }
+                        chat_wnds.tb.rows = chat_dims.tb_h-2;
+                    }
+                }
+
+                if (chat_wnds.tb.max_col != (chat_dims.tb_w-1))
+                {
+                    chat_wnds.tb.max_col = chat_dims.tb_w-1;
+
+                    for (index = 0; index < chat_wnds.tb.rows; ++index)
+                    {
+                        if (chat_wnds.tb.cols[index] >= chat_wnds.tb.max_col)
+                        {
+                            if (index != chat_wnds.tb.rows-1)
+                                chat_wnds.tb.cols[index+1] += chat_wnds.tb.max_col - 1 - chat_wnds.tb.cols[index];
+                            chat_wnds.tb.cols[index] = chat_wnds.tb.max_col-1;
+                        }
+                    }
+
+                    if (chat_wnds.tb.col >= chat_wnds.tb.cols[chat_wnds.tb.row])
+                    {
+                        if (chat_wnds.tb.row < chat_wnds.tb.rows-1)
+                        {
+                            chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row] - 1 - chat_wnds.tb.col;
+                            chat_wnds.tb.row++;
+                        }
+                    }
+                    else
+                        chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row] - 1;
+                }
+            }
+// char ch[5];
+//                         snprintf(ch, 4, "%d", chat_wnds.tb.str.str_len);
+//                         popup_wnd(ch, POPUP_W_BLOCK);
             global_wnds.wnd = newwin(global_dims.wnd_h, global_dims.wnd_w, global_axis.wnd_y, global_axis.wnd_x);
 
             chat_wnds.pad_borders[0] = derwin(global_wnds.wnd, chat_dims.tb_h, chat_dims.tb_w, chat_axis.tb_y, chat_axis.tb_x);
             chat_wnds.pad_borders[1] = derwin(global_wnds.wnd, chat_dims.msg_h, chat_dims.msg_w, chat_axis.msg_y, chat_axis.msg_x);
             chat_wnds.pad_borders[2] = derwin(global_wnds.wnd, chat_dims.usrs_h, chat_dims.usrs_w, chat_axis.usrs_y, chat_axis.usrs_x);
-
-            chat_wnds.pads[0] = derwin(chat_wnds.pad_borders[0], chat_dims.tb_h-2, chat_dims.tb_w-2, 1, 1);
-            chat_wnds.pads[1] = derwin(chat_wnds.pad_borders[1], chat_dims.msg_h-2, chat_dims.msg_w-2, 1, 1);
-            chat_wnds.pads[2] = derwin(chat_wnds.pad_borders[2], chat_dims.usrs_h-2, chat_dims.usrs_w-2, 1, 1);
+            for (index = 0; index < sizeof(chat_wnds.pads)/sizeof(struct WINDOW*);++index)
+            {
+                chat_wnds.pads[index] = newpad(chat_dims.pad_h[index], chat_dims.pad_w[index]);
+            }
 
             global_wnds.note_w = newwin(global_dims.note_h, global_dims.note_w, global_axis.note_y, global_axis.note_x);
             global_wnds.note_sw = derwin(global_wnds.note_w, global_dims.note_h-2, global_dims.note_w-2, 1, 1);
@@ -1536,10 +1698,6 @@ int _draw_window(int wnd_type)
             box(chat_wnds.pad_borders[2], ACS_VLINE, ACS_HLINE);
             box(global_wnds.note_w, ' ', ' ');
 
-            // wbkgd(chat_wnds.pads[0], COLOR_PAIR(2));
-            // wbkgd(chat_wnds.pads[1], COLOR_PAIR(2));
-            // wbkgd(chat_wnds.pads[2], COLOR_PAIR(2));
-
             mvwaddch(chat_wnds.pad_borders[0], 0, 0, ACS_LTEE);
             mvwaddch(chat_wnds.pad_borders[0], 0, chat_dims.tb_w-1, ACS_RTEE);
 
@@ -1548,7 +1706,56 @@ int _draw_window(int wnd_type)
 
             mvwprintw(global_wnds.wnd, 0, (global_dims.wnd_w-(strlen(CHAT_SCR_LABEL)+strlen(chat_wnds.server_name)))/2, CHAT_SCR_LABEL, chat_wnds.server_name);
 
+            wclear(chat_wnds.pads[0]);
+            mvwprintw(chat_wnds.pads[0], 0, 0, "%s", chat_wnds.tb.str.text);
+
+            switch (chat_wnds.mode)
+            {
+            case MODE_PAD:
+            {
+                switch (chat_wnds.pad_n)
+                {
+                case 0:
+                {
+
+                }
+                    break;
+                case 1:
+                {
+
+                }
+                    break;
+                default:
+                    break;
+                }
+            }
+                break;
+            case MODE_TEXTBOX:
+            {
+                cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+                cursor.is_set = true;
+
+                move(cursor.y, cursor.x);
+                curs_set(1);
+            }
+                break;
+            
+            default:
+                break;
+            }
+
             mvwprintw(global_wnds.note_sw, 0, ((global_dims.note_w-note_labels.chat_wnd.size)/2), note_labels.chat_wnd.text);
+            mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                chat_wnds.tb.index,
+                                                chat_wnds.tb.row,
+                                                chat_wnds.tb.col,
+                                                chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                chat_wnds.tb.str.str_len,
+                                                chat_wnds.tb.rows,
+                                                chat_wnds.tb.max_col);
         }
             break;
         case WND_NONE:
@@ -1582,7 +1789,7 @@ int _update_window(void)
     switch (cur_wnd)
     {
         case WND_NONE:
-            ret = EXIT_FAILURE;
+        ret = EXIT_FAILURE;
             break;
         case WND_MAIN_MENU:
             {
@@ -1654,11 +1861,15 @@ int _update_window(void)
             wnoutrefresh(global_wnds.wnd);
             for (index = 0; index < 3; ++index)
             {
-                wnoutrefresh(chat_wnds.pads[index]);
                 wnoutrefresh(chat_wnds.pad_borders[index]);
             }
             wnoutrefresh(global_wnds.note_w);
             wnoutrefresh(global_wnds.note_sw);
+            for (index = 0; index < 3; ++index)
+            {
+                pnoutrefresh(chat_wnds.pads[index], chat_axis.pad_ys[index], chat_axis.pad_xs[index], chat_axis.vis_pad_ys[index], chat_axis.vis_pad_xs[index], size.ws_row, size.ws_col);
+                // pnoutrefresh(chat_wnds.pads[index], chat_axis.pad_ys[index], chat_axis.pad_xs[index], chat_axis.vis_pad_ys[index], chat_axis.vis_pad_xs[index], chat_axis.vis_pad_ye[index], chat_axis.vis_pad_xe[index]);
+            }
             wnoutrefresh(stdscr);
         }
             break;
@@ -1826,6 +2037,8 @@ int _delete_window(void)
             wclear(stdscr);
             refresh();
 
+            curs_set(0);
+
             delwin(global_wnds.note_sw);
             delwin(global_wnds.note_w);
 
@@ -1853,12 +2066,12 @@ int _delete_window(void)
     return ret;
 }
 
-int _free_memory(int mode)
+int _free_memory(int wnd)
 {
     int index;
     int ret = EXIT_SUCCESS;
 
-    switch (mode)
+    switch (wnd)
     {
     case WND_NONE:
     {
@@ -1947,10 +2160,10 @@ int _free_memory(int mode)
             }
         }
 
-        if (chat_wnds.tb.str != NULL)
+        if (chat_wnds.tb.str.text != NULL)
         {
-            free(chat_wnds.tb.str);
-            chat_wnds.tb.str = NULL;
+            free(chat_wnds.tb.str.text);
+            chat_wnds.tb.str.text = NULL;
         }
         if (chat_wnds.tb.cols != NULL)
         {
@@ -2029,10 +2242,10 @@ int _free_memory(int mode)
         break;
     case WND_CHAT:
     {
-        if (chat_wnds.tb.str != NULL)
+        if (chat_wnds.tb.str.text != NULL)
         {
-            free(chat_wnds.tb.str);
-            chat_wnds.tb.str = NULL;
+            free(chat_wnds.tb.str.text);
+            chat_wnds.tb.str.text = NULL;
         }
         if (chat_wnds.tb.cols != NULL)
         {
@@ -2051,15 +2264,14 @@ int _free_memory(int mode)
 
 int popup_wnd(char *str, int type, ...)
 {
-    WINDOW *popup_w;
-    WINDOW *popup_sw;
-
-    int popup_w_w;
-    int popup_w_h;
-    int popup_sw_w;
-    int popup_sw_h;
-    int str_len = 0;
     va_list ap;
+    char *dyn_str = NULL;
+    int str_len = 0;
+    char *chr_ptr = NULL;
+    int *lines_len = NULL;
+    int lines = 1;
+    void *tmp_ptr = NULL;
+    int index;
     int ret = EXIT_SUCCESS;
 
     if (str != NULL)
@@ -2067,43 +2279,122 @@ int popup_wnd(char *str, int type, ...)
     else
         return EXIT_FAILURE;
 
-    popup_sw_w = str_len + 12;
-    popup_sw_h = 3;
-    if (popup_sw_w > (size.ws_col-12))
+    lines_len = malloc(sizeof(int)*lines);
+    if (lines_len == NULL)
+        return EXIT_FAILURE;
+    
+    lines_len[0] = 0;
+    popup_dims.subwnd_h = 2;
+
+    chr_ptr = strchr(str, '\n');
+    if (chr_ptr != NULL)
     {
-        int tmp = (size.ws_col-12) / popup_sw_w;
-        popup_sw_w /= tmp;
-        popup_sw_h += tmp;
+        index = lines-1;
+        popup_dims.subwnd_w = 0;
+
+        while (chr_ptr != NULL)
+        {
+            index++;
+            lines++;
+
+            tmp_ptr = (void *)realloc(lines_len, sizeof(int)*lines);
+            if (tmp_ptr == NULL)
+                return EXIT_FAILURE;
+            lines_len = (int *)tmp_ptr;
+
+            lines_len[index] = (int)chr_ptr-(int)str+1;
+            popup_dims.subwnd_w = popup_dims.subwnd_w > lines_len[index] - lines_len[index-1] ? popup_dims.subwnd_w : lines_len[index] - lines_len[index-1];
+            if (popup_dims.subwnd_w > popup_dims.subwnd_max_w)
+            {
+                while (lines_len[index] - lines_len[index-1] > popup_dims.subwnd_max_w)
+                {
+                    lines++;
+
+                    tmp_ptr = (void *)realloc(lines_len, sizeof(int)*lines);
+                    if (tmp_ptr == NULL)
+                        return EXIT_FAILURE;
+                    lines_len = (int *)tmp_ptr;
+
+                    lines_len[lines-1] = lines_len[lines-2];
+                    lines_len[lines-2] = lines_len[lines-3] + popup_dims.subwnd_max_w;
+                }
+                popup_dims.subwnd_w = popup_dims.subwnd_max_w;
+            }
+
+            chr_ptr = strchr(&str[lines_len[lines-1]], '\n');
+        }
+        popup_dims.subwnd_w = popup_dims.subwnd_w > str_len - lines_len[lines-1] ? popup_dims.subwnd_w : str_len - lines_len[lines-1];
     }
-    if (popup_sw_h > (size.ws_row-2))
+    else
+    {
+        popup_dims.subwnd_w = str_len;
+
+        
+    }
+    if (popup_dims.subwnd_w > popup_dims.subwnd_max_w)
+    {
+        while (popup_dims.subwnd_w > popup_dims.subwnd_max_w*lines)
+        {
+            lines++;
+            tmp_ptr = (void *)realloc(lines_len, sizeof(int)*lines);
+            if (tmp_ptr == NULL)
+                    return EXIT_FAILURE;
+            lines_len = (int *)tmp_ptr;
+            lines_len[lines-1] = lines_len[lines-2] + popup_dims.subwnd_max_w;
+        }
+        popup_dims.subwnd_w = popup_dims.subwnd_max_w;
+    }
+
+    popup_dims.subwnd_h = popup_dims.subwnd_h + lines;
+
+    if (popup_dims.subwnd_h > popup_dims.subwnd_max_h)
         return EXIT_FAILURE;
 
-    popup_w_w = popup_sw_w + 2;
-    popup_w_h = popup_sw_h + 2;
+    popup_dims.wnd_h = popup_dims.subwnd_h + 2 + (popup_dims.sw_v_offset*2);
+    popup_dims.wnd_w = popup_dims.subwnd_w + 2 + (popup_dims.sw_h_offset*2);
 
     va_start(ap, type);
 
-    popup_w = newwin(popup_w_h, popup_w_w, (size.ws_row/2)-(popup_w_h/2), (size.ws_col/2)-(popup_w_w/2));
-    popup_sw = derwin(popup_w, popup_sw_h, popup_sw_w, 1, 1);
+    popup_wnds.wnd = newwin(popup_dims.wnd_h, popup_dims.wnd_w, global_axis.wnd_y+((global_dims.wnd_h - popup_dims.wnd_h)/2), global_axis.wnd_x+((global_dims.wnd_w - popup_dims.wnd_w)/2));
+    popup_wnds.subwnd = derwin(popup_wnds.wnd, popup_dims.subwnd_h, popup_dims.subwnd_w, 1+popup_dims.sw_v_offset, 1+popup_dims.sw_h_offset);
 
-    box(popup_w, ACS_VLINE, ACS_HLINE);
+    box(popup_wnds.wnd, ACS_VLINE, ACS_HLINE);
 
-    if (popup_sw_h == 3)
-        wmove(popup_sw, 0, ((popup_sw_w)-strlen(str))/2);
-    wprintw(popup_sw, "%s", str);
+    for (index = 0; index < lines; ++index)
+    {
 
-    wmove(popup_sw, popup_sw_h-1, ((popup_sw_w)/2));
-    wattron(popup_sw, A_BLINK);
-    waddch(popup_sw, ACS_DIAMOND);
-    wattroff(popup_sw, A_BLINK);
+        tmp_ptr = (void *)realloc(dyn_str, sizeof(char)*popup_dims.subwnd_w+1);
+        if (tmp_ptr == NULL)
+            break;
+        
+        dyn_str = (char *)tmp_ptr;
+        memset(dyn_str, NULL, popup_dims.subwnd_w+1);
+        if (index != lines-1)
+        {
+            strncpy(dyn_str, &str[lines_len[index]], (lines_len[index+1]-lines_len[index]));
+            mvwprintw(popup_wnds.subwnd, index, (popup_dims.subwnd_w-(lines_len[index+1]-lines_len[index]))/2, "%s", dyn_str);
+        }
+        else
+        {
+            strncpy(dyn_str, &str[lines_len[index]], (str_len-lines_len[index]));
+            mvwprintw(popup_wnds.subwnd, index, (popup_dims.subwnd_w-(str_len-lines_len[index]))/2, "%s", dyn_str);
+        }
+    }
 
-    wnoutrefresh(popup_w);
-    wnoutrefresh(popup_sw);
+    wattron(popup_wnds.subwnd, A_BLINK);
+    mvwaddch(popup_wnds.subwnd, (popup_dims.subwnd_h-1), (popup_dims.subwnd_w-1)/2, ACS_DIAMOND);
+    wattroff(popup_wnds.subwnd, A_BLINK);
+
+    wnoutrefresh(popup_wnds.wnd);
+    wnoutrefresh(popup_wnds.subwnd);
     doupdate();
+
+    keypad(popup_wnds.wnd, true);
 
     switch (type)
     {
         case POPUP_W_BLOCK:
+            wgetch(popup_wnds.wnd);
             break;
         case POPUP_W_WAIT:
             sleep(1);
@@ -2117,13 +2408,22 @@ int popup_wnd(char *str, int type, ...)
             break;
     }
 
-    wclear(popup_w);
+    wclear(popup_wnds.wnd);
 
-    wnoutrefresh(popup_w);
+    wnoutrefresh(popup_wnds.wnd);
     doupdate();
 
-    delwin(popup_sw);
-    delwin(popup_w);
+    delwin(popup_wnds.subwnd);
+    delwin(popup_wnds.wnd);
+
+    popup_wnds.wnd = NULL;
+    popup_wnds.subwnd = NULL;
+
+    if (dyn_str != NULL)
+        free(dyn_str);
+    
+    if (lines_len != NULL)
+        free(lines_len);
 
     _draw_window(cur_wnd);
 
@@ -3639,7 +3939,7 @@ int cfg_wnd(int *option)
                             break;
                         }
                     }
-                    mvwprintw(global_wnds.wnd, 0, 0, "%d:%d:%d", cfg_wnds.fields[cfg_wnds.line].selection, cfg_wnds.fields[cfg_wnds.line].value_str.str_len, cfg_wnds.fields[cfg_wnds.line].value_str.max_len);
+                    // mvwprintw(global_wnds.wnd, 0, 0, "%d:%d:%d", cfg_wnds.fields[cfg_wnds.line].selection, cfg_wnds.fields[cfg_wnds.line].value_str.str_len, cfg_wnds.fields[cfg_wnds.line].value_str.max_len);
                     _update_window();
                 }
                 break;
@@ -3705,7 +4005,7 @@ int cfg_wnd(int *option)
                             break;
                         }
 
-                        mvwprintw(global_wnds.wnd, 0, 0, "%d:%d:%d", cfg_wnds.fields[cfg_wnds.line].selection, cfg_wnds.fields[cfg_wnds.line].value_str.str_len, cfg_wnds.fields[cfg_wnds.line].value_str.max_len);
+                        // mvwprintw(global_wnds.wnd, 0, 0, "%d:%d:%d", cfg_wnds.fields[cfg_wnds.line].selection, cfg_wnds.fields[cfg_wnds.line].value_str.str_len, cfg_wnds.fields[cfg_wnds.line].value_str.max_len);
                         _update_window();
                     }
                 }
@@ -4105,6 +4405,8 @@ int chat_wnd(int *option, char *server_name)
     int ret = EXIT_SUCCESS;
 
     chat_wnds.server_name = server_name;
+    chat_wnds.mode = MODE_TEXTBOX;
+    chat_wnds.pad_n = 0;
 
     chat_axis.pad_ys[0] = 0;
     chat_axis.pad_xs[0] = 0;
@@ -4122,17 +4424,16 @@ int chat_wnd(int *option, char *server_name)
     chat_axis.pad_xe[2] = chat_dims.vis_pad_w[2] - 1;
 
     _draw_window(WND_CHAT);
-
+// {
+//     char ch[5];
+//     snprintf(ch, 4, "%d", chat_wnds.tb.str.str_len);
+//     popup_wnd(ch, POPUP_W_BLOCK);
+// }
     while(run_flag != 0)
     {
         symbol = wgetch(global_wnds.wnd);
         switch (symbol)
         {
-            case '\n':
-            {
-                _update_window();
-            }
-                break;
             case '\t':
             {
                 switch (chat_wnds.mode)
@@ -4157,7 +4458,23 @@ int chat_wnd(int *option, char *server_name)
             {}
                 break;
             case KEY_F(2):
-            {}
+            {
+                popup_wnd(chat_wnds.tb.str.text, POPUP_W_BLOCK);
+
+                    memset(chat_wnds.tb.str.text, NULL, chat_wnds.tb.str.size);
+                    chat_wnds.tb.str.str_len = 0;
+
+                    chat_wnds.tb.col = 0;
+                    chat_wnds.tb.row = 0;
+                    for (index = 0; index < chat_wnds.tb.rows; ++index)
+                        chat_wnds.tb.cols[index] = 0;
+                    chat_wnds.tb.index = 0;
+
+                    wclear(chat_wnds.pads[0]);
+                    mvwprintw(chat_wnds.pads[0], 0, 0, "%s", chat_wnds.tb.str.text);
+
+                    _update_window();
+            }
                 break;
             case KEY_F(3):
             {
@@ -4179,62 +4496,482 @@ int chat_wnd(int *option, char *server_name)
         {
             case MODE_PAD:
             {
-                
+                switch (chat_wnds.pad_n)
+                {
+                case 0:
+                {
+                    switch (symbol)
+                    {
+                    case '\n':
+                    {
+                        
+                    }
+                        break;
+                    case KEY_RIGHT:
+                    {
+                        chat_wnds.pad_n = 1;
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                    break;
+                case 1:
+                {
+                    switch (symbol)
+                    {
+                    case '\n':
+                    {
+                        
+                    }
+                        break;
+                    case KEY_LEFT:
+                    {
+                        chat_wnds.pad_n = 0;
+                    }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                    break;
+                default:
+                    break;
+                }
             }
                 break;
             case MODE_TEXTBOX:
             {
                 switch (symbol)
                 {
-                case '\n':
-                {
+                    case KEY_UP:
+                    {
+                        if (chat_wnds.tb.row <= 0)
+                            break;
+
+                        chat_wnds.tb.index = chat_wnds.tb.index - chat_wnds.tb.col;
+
+                        chat_wnds.tb.row--;
+
+                        if (chat_wnds.tb.col > chat_wnds.tb.cols[chat_wnds.tb.row]-1)
+                        {
+                            chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row]-1;
+                        }
+
+                        chat_wnds.tb.index = chat_wnds.tb.index - (chat_wnds.tb.cols[chat_wnds.tb.row] - chat_wnds.tb.col);
+                        cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                        cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+
+                        move(cursor.y, cursor.x);
+
+                        mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                            chat_wnds.tb.index,
+                                                            chat_wnds.tb.row,
+                                                            chat_wnds.tb.col,
+                                                            chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                            chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                            chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                            chat_wnds.tb.str.str_len,
+                                                            chat_wnds.tb.rows,
+                                                            chat_wnds.tb.max_col);
+                        _update_window();
+                    }
+                        break;
+                    case KEY_DOWN:
+                    {
+                        if (chat_wnds.tb.row == chat_wnds.tb.rows-1 || (chat_wnds.tb.cols[chat_wnds.tb.row+1] == 0 && chat_wnds.tb.indexes[chat_wnds.tb.row+1] == 0))
+                            break;
+
+                        chat_wnds.tb.row++;
+                        if (chat_wnds.tb.col > chat_wnds.tb.cols[chat_wnds.tb.row])
+                            chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row];
+                        chat_wnds.tb.index = chat_wnds.tb.indexes[chat_wnds.tb.row]+chat_wnds.tb.col;
+
+                        cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                        cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+
+                        move(cursor.y, cursor.x);
+
+                        mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                            chat_wnds.tb.index,
+                                                            chat_wnds.tb.row,
+                                                            chat_wnds.tb.col,
+                                                            chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                            chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                            chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                            chat_wnds.tb.str.str_len,
+                                                            chat_wnds.tb.rows,
+                                                            chat_wnds.tb.max_col);
+                        _update_window();
+                    }
+                        break;
+                    case KEY_LEFT:
+                    {
+                        if (chat_wnds.tb.index <= 0)
+                            break;
+
+                        chat_wnds.tb.index--;
+
+                        if (chat_wnds.tb.col == 0)
+                        {
+                            if (chat_wnds.tb.row == 0)
+                                break;
+                            chat_wnds.tb.row--;
+                            chat_wnds.tb.col = chat_wnds.tb.cols[chat_wnds.tb.row]-1;
+                        }
+                        else
+                            chat_wnds.tb.col--;
+
+                        cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                        cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+
+                        move(cursor.y, cursor.x);
+
+                        mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                            chat_wnds.tb.index,
+                                                            chat_wnds.tb.row,
+                                                            chat_wnds.tb.col,
+                                                            chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                            chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                            chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                            chat_wnds.tb.str.str_len,
+                                                            chat_wnds.tb.rows,
+                                                            chat_wnds.tb.max_col);
+                        _update_window();
+                    }
+                        break;
+                    case KEY_RIGHT:
+                    {
+                        if (chat_wnds.tb.index >= chat_wnds.tb.str.size)
+                            break;
+
+                        if (chat_wnds.tb.index >= chat_wnds.tb.str.str_len)
+                            break;
+
+                        if (chat_wnds.tb.row == chat_wnds.tb.rows-1 && chat_wnds.tb.col == chat_wnds.tb.cols[chat_wnds.tb.row])
+                            break;
+
+                        if (chat_wnds.tb.col == chat_wnds.tb.cols[chat_wnds.tb.row] && chat_wnds.tb.str.text[chat_wnds.tb.indexes[chat_wnds.tb.row]+chat_wnds.tb.cols[chat_wnds.tb.row]-1] != '\n' && chat_wnds.tb.cols[chat_wnds.tb.row+1] == 0)
+                            break;
+
+                        chat_wnds.tb.index++;
+                        if (chat_wnds.tb.row != chat_wnds.tb.rows-1 && (chat_wnds.tb.index > chat_wnds.tb.indexes[chat_wnds.tb.row]+chat_wnds.tb.cols[chat_wnds.tb.row] || chat_wnds.tb.str.text[chat_wnds.tb.index-1] == '\n'))
+                            chat_wnds.tb.row++;
+                        chat_wnds.tb.col = chat_wnds.tb.index - chat_wnds.tb.indexes[chat_wnds.tb.row];
+
+                        cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                        cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+
+                        move(cursor.y, cursor.x);
+
+                        mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                            chat_wnds.tb.index,
+                                                            chat_wnds.tb.row,
+                                                            chat_wnds.tb.col,
+                                                            chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                            chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                            chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                            chat_wnds.tb.str.str_len,
+                                                            chat_wnds.tb.rows,
+                                                            chat_wnds.tb.max_col);
+                        _update_window();
+                    }
+                        break;
+                    case KEY_BACKSPACE:
+                    {
+                        if (chat_wnds.tb.index == 0 || (chat_wnds.tb.cols[chat_wnds.tb.row] == 0 && chat_wnds.tb.row == 0))
+                            break;
+                        chat_wnds.tb.index--;
+                        chat_wnds.tb.str.str_len--;
+                        chat_wnds.tb.col--;
+
+                        _remove_char_at(chat_wnds.tb.str.text, chat_wnds.tb.str.size, chat_wnds.tb.index);
+
+                        if (chat_wnds.tb.col < 0)
+                            chat_wnds.tb.row--;
+
+                        for (index = 0; index < chat_wnds.tb.rows; ++index)
+                        {
+                            chat_wnds.tb.cols[index] = 0;
+                            chat_wnds.tb.indexes[index] = 0;
+                            chat_wnds.tb.syms_left[index] = (chat_wnds.tb.max_col-1);
+                        }
+                        
+                        chat_wnds.tb.cols[0] = chat_wnds.tb.str.str_len;
+
+                        if (chat_wnds.tb.str.str_len > 0)
+                        {
+                            int tmp_row = 0;
+                            char *ptr = NULL;
+
+                            ptr = strchr(chat_wnds.tb.str.text, '\n');
+                            if (ptr != NULL)
+                            {
+                                while(ptr != NULL)
+                                {
+                                    if (tmp_row >= chat_wnds.tb.rows-1)
+                                        break;
+
+                                    tmp_row++;
+                                    chat_wnds.tb.indexes[tmp_row] = (int)ptr-(int)chat_wnds.tb.str.text+1;
+                                    chat_wnds.tb.cols[tmp_row-1] = chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1];
+                                    chat_wnds.tb.syms_left[tmp_row-1] = 0;
+
+                                    if (chat_wnds.tb.cols[tmp_row-1] > (chat_wnds.tb.max_col-1))
+                                    {
+                                        while ((chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1]) > (chat_wnds.tb.max_col-1))
+                                        {
+                                            if (tmp_row == chat_wnds.tb.rows-1)
+                                            {
+                                                chat_wnds.tb.indexes[tmp_row] = chat_wnds.tb.indexes[tmp_row] + (chat_wnds.tb.max_col-1);
+                                                chat_wnds.tb.cols[tmp_row-1] = (chat_wnds.tb.max_col-1);
+                                                break;
+                                            }
+
+                                            tmp_row++;
+                                            chat_wnds.tb.indexes[tmp_row] = chat_wnds.tb.indexes[tmp_row-1];
+                                            chat_wnds.tb.indexes[tmp_row-1] = chat_wnds.tb.indexes[tmp_row-2] + (chat_wnds.tb.max_col-1);
+
+                                            // this lines might cause errors
+                                            chat_wnds.tb.cols[tmp_row-1] = chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1];
+                                            chat_wnds.tb.cols[tmp_row-2] = chat_wnds.tb.indexes[tmp_row-1] - chat_wnds.tb.indexes[tmp_row-2];
+
+                                            chat_wnds.tb.syms_left[tmp_row-1] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row-1];
+                                            chat_wnds.tb.syms_left[tmp_row-2] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row-2];
+                                        }
+                                    }
+                                    ptr = strchr(&chat_wnds.tb.str.text[chat_wnds.tb.indexes[tmp_row]], '\n');
+                                }
+                            }
+
+                            chat_wnds.tb.cols[tmp_row] = chat_wnds.tb.str.str_len - chat_wnds.tb.indexes[tmp_row];
+                            chat_wnds.tb.syms_left[tmp_row] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row];
+
+                            if (chat_wnds.tb.cols[tmp_row] > (chat_wnds.tb.max_col-1))
+                            {
+                                while (chat_wnds.tb.cols[tmp_row] > (chat_wnds.tb.max_col-1))
+                                {
+                                    if (tmp_row == chat_wnds.tb.rows-1)
+                                    {
+                                        chat_wnds.tb.cols[tmp_row] = (chat_wnds.tb.max_col-1);
+                                        chat_wnds.tb.syms_left[tmp_row] = 0;
+                                        break;
+                                    }
+
+                                    tmp_row++;
+                                    // chat_wnds.tb.indexes[chat_wnds.tb.row] = chat_wnds.tb.indexes[chat_wnds.tb.row-1];
+                                    chat_wnds.tb.indexes[tmp_row] = chat_wnds.tb.indexes[tmp_row-1] + (chat_wnds.tb.max_col-1);
+                                    chat_wnds.tb.cols[tmp_row-1] = chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1];
+                                    chat_wnds.tb.syms_left[tmp_row-1] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row-1]; // or 0
+
+                                    chat_wnds.tb.cols[tmp_row] = chat_wnds.tb.str.str_len - chat_wnds.tb.indexes[tmp_row];
+                                    chat_wnds.tb.syms_left[tmp_row] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row]; // or 0
+                                }
+                            }
+
+                            chat_wnds.tb.tb_syms_left = 0;
+                            for (index = 0; index < chat_wnds.tb.rows; ++index)
+                            {
+                                chat_wnds.tb.tb_syms_left += chat_wnds.tb.syms_left[index];
+                            }
+
+                            for (index = 0; index < chat_wnds.tb.rows; ++index)
+                            {
+                                if (index == chat_wnds.tb.rows-1)
+                                {
+                                    chat_wnds.tb.row = index;
+                                    break;
+                                }
+
+                                if (chat_wnds.tb.index >= chat_wnds.tb.indexes[index] && (chat_wnds.tb.index < chat_wnds.tb.indexes[index+1] || chat_wnds.tb.indexes[index+1] == 0))
+                                {
+                                    chat_wnds.tb.row = index;
+                                    break;
+                                }
+                            }
+                            chat_wnds.tb.col = chat_wnds.tb.index - chat_wnds.tb.indexes[chat_wnds.tb.row];
+                        }
+
+                        cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                        cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+
+                        move(cursor.y, cursor.x);
+                        mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                        chat_wnds.tb.index,
+                                                        chat_wnds.tb.row,
+                                                        chat_wnds.tb.col,
+                                                        chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                        chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                        chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                        chat_wnds.tb.str.str_len,
+                                                        chat_wnds.tb.rows,
+                                                        chat_wnds.tb.max_col);
+                        wclear(chat_wnds.pads[0]);
+                        mvwprintw(chat_wnds.pads[0], 0, 0, "%s", chat_wnds.tb.str.text);
+                        _update_window();
+                    }
+                        break;
+                    default:
+                    {
+                        if (chat_wnds.tb.index == chat_wnds.tb.str.size || (chat_wnds.tb.cols[chat_wnds.tb.row] == chat_wnds.tb.max_col-1 && chat_wnds.tb.row == chat_wnds.tb.rows-1))
+                            break;
+
+                        if (chat_wnds.tb.tb_syms_left == 0)
+                            break;
+
+                        if (symbol != '\n' && (symbol <= 0x1F || symbol >= 0x7F))
+                            break;
+
+                        // if ((symbol > 0x1F && symbol < 0x7F) || (char)symbol == '\n')
+                        // {
+                        if (chat_wnds.tb.row == chat_wnds.tb.rows-1 && (chat_wnds.tb.syms_left[chat_wnds.tb.row] == 0 || (char)symbol == '\n'))
+                            break;
+
+                        if (chat_wnds.tb.index == chat_wnds.tb.max_col-1 || chat_wnds.tb.cols[chat_wnds.tb.row] == 0)
+                        {
+                            chat_wnds.tb.str.text[chat_wnds.tb.index] = (char)symbol;
+                        }
+                        else if (chat_wnds.tb.index < chat_wnds.tb.max_col-1)
+                        {
+                            _put_char_at(chat_wnds.tb.str.text, chat_wnds.tb.str.size, (char)symbol, chat_wnds.tb.index);
+                        }
+
+                        chat_wnds.tb.index++;
+                        chat_wnds.tb.str.str_len++;
+                        // chat_wnds.tb.cols[chat_wnds.tb.row]++;
+                        // if (chat_wnds.tb.cols[chat_wnds.tb.row] == chat_wnds.tb.max_col-1 || (char)symbol == '\n')
+                        // {
+                        //     chat_wnds.tb.row++;
+                        //     chat_wnds.tb.col = 0;
+                        // }
+                        // else
+                        // {
+                        //     chat_wnds.tb.col++;
+                        // }
+
+                        for (index = 0; index < chat_wnds.tb.rows; ++index)
+                        {
+                            chat_wnds.tb.cols[index] = 0;
+                            chat_wnds.tb.indexes[index] = 0;
+                            chat_wnds.tb.syms_left[index] = (chat_wnds.tb.max_col-1);
+                        }
                     
-                }
-                    break;
-                case KEY_LEFT:
-                {
-                    // if (chat_wnds.curs_y > 0)
-                    // {
-                    //     if (chat_wnds.curs_x > 0)
-                    //     {
+                        chat_wnds.tb.cols[0] = chat_wnds.tb.str.str_len;
 
-                    //     }
-                    //     // else
-                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
+                        if (chat_wnds.tb.str.str_len > 0)
+                        {
+                            int tmp_row = 0;
+                            char *ptr = NULL;
 
-                    //     create_srv.selection--;
+                            ptr = strchr(chat_wnds.tb.str.text, '\n');
+                            if (ptr != NULL)
+                            {
+                                while(ptr != NULL)
+                                {
+                                    if (tmp_row >= chat_wnds.tb.rows-1)
+                                        break;
 
-                    //     wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
-                    //     wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                                    tmp_row++;
+                                    chat_wnds.tb.indexes[tmp_row] = (int)ptr-(int)chat_wnds.tb.str.text+1;
+                                    chat_wnds.tb.cols[tmp_row-1] = chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1];
+                                    chat_wnds.tb.syms_left[tmp_row-1] = 0;
 
-                    //     _update_window();
-                    // }
-                    // else if (chat_wnds.curs_x > 0)
-                    // {
-                    //     chat_wnds.curs_x--;
-                    //     chat_wnds.char_index--;
-                    // }
-                }
-                    break;
-                case KEY_RIGHT:
-                {
-                    // if (create_srv.selection < 2)
-                    // {
-                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
+                                    if (chat_wnds.tb.cols[tmp_row-1] > (chat_wnds.tb.max_col-1))
+                                    {
+                                        while ((chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1]) > (chat_wnds.tb.max_col-1))
+                                        {
+                                            if (tmp_row == chat_wnds.tb.rows-1)
+                                            {   // possibly, that's it for this branch
+                                                chat_wnds.tb.indexes[tmp_row] = chat_wnds.tb.indexes[tmp_row] + (chat_wnds.tb.max_col-1);
+                                                chat_wnds.tb.cols[tmp_row-1] = (chat_wnds.tb.max_col-1);
+                                                break;
+                                            }
 
-                    //     create_srv.selection++;
+                                            tmp_row++;
+                                            chat_wnds.tb.indexes[tmp_row] = chat_wnds.tb.indexes[tmp_row-1];
+                                            chat_wnds.tb.indexes[tmp_row-1] = chat_wnds.tb.indexes[tmp_row-2] + (chat_wnds.tb.max_col-1);
 
-                    //     wattron(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
-                    //     mvwprintw(create_srv.btns[create_srv.selection].wnd, 0, (create_dims.btns_w-create_srv.btns[create_srv.selection].lbl.size)/2, create_srv.btns[create_srv.selection].lbl.text);
-                    //     wattroff(create_srv.btns[create_srv.selection].wnd, A_BOLD | A_UNDERLINE);
+                                            // this lines might cause errors
+                                            chat_wnds.tb.cols[tmp_row-1] = chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1];
+                                            chat_wnds.tb.cols[tmp_row-2] = chat_wnds.tb.indexes[tmp_row-1] - chat_wnds.tb.indexes[tmp_row-2];
 
-                    //     _update_window();
-                    // }
-                }
-                    break;
-                default:
-                    break;
+                                            chat_wnds.tb.syms_left[tmp_row-1] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row-1];
+                                            chat_wnds.tb.syms_left[tmp_row-2] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row-2];
+                                        }
+                                    }
+                                    ptr = strchr(&chat_wnds.tb.str.text[chat_wnds.tb.indexes[tmp_row]], '\n');
+                                }
+                            }
+
+                            chat_wnds.tb.cols[tmp_row] = chat_wnds.tb.str.str_len - chat_wnds.tb.indexes[tmp_row];
+                            chat_wnds.tb.syms_left[tmp_row] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row];
+
+                            if (chat_wnds.tb.cols[tmp_row] > (chat_wnds.tb.max_col-1))
+                            {
+                                while (chat_wnds.tb.cols[tmp_row] > (chat_wnds.tb.max_col-1))
+                                {
+                                    if (tmp_row == chat_wnds.tb.rows-1)
+                                    {
+                                        chat_wnds.tb.cols[tmp_row] = (chat_wnds.tb.max_col-1);
+                                        chat_wnds.tb.syms_left[tmp_row] = 0;
+                                        break;
+                                    }
+
+                                    tmp_row++;
+                                    chat_wnds.tb.indexes[tmp_row] = chat_wnds.tb.indexes[tmp_row-1] + (chat_wnds.tb.max_col-1);
+                                    chat_wnds.tb.cols[tmp_row-1] = chat_wnds.tb.indexes[tmp_row] - chat_wnds.tb.indexes[tmp_row-1];
+                                    chat_wnds.tb.syms_left[tmp_row-1] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row-1]; // or 0
+
+                                    chat_wnds.tb.cols[tmp_row] = chat_wnds.tb.str.str_len - chat_wnds.tb.indexes[tmp_row];
+                                    chat_wnds.tb.syms_left[tmp_row] = (chat_wnds.tb.max_col-1) - chat_wnds.tb.cols[tmp_row]; // or 0
+                                }
+                            }
+
+                            chat_wnds.tb.tb_syms_left = 0;
+                            for (index = 0; index < chat_wnds.tb.rows; ++index)
+                            {
+                                chat_wnds.tb.tb_syms_left += chat_wnds.tb.syms_left[index];
+                            }
+                            
+                            for (index = 0; index < chat_wnds.tb.rows; ++index)
+                            {
+                                if (index == chat_wnds.tb.rows-1)
+                                {
+                                    chat_wnds.tb.row = index;
+                                    break;
+                                }
+
+                                if (chat_wnds.tb.index >= chat_wnds.tb.indexes[index] && (chat_wnds.tb.index < chat_wnds.tb.indexes[index+1] || chat_wnds.tb.indexes[index+1] == 0))
+                                {
+                                    chat_wnds.tb.row = index;
+                                    break;
+                                }
+                            }
+                            chat_wnds.tb.col = chat_wnds.tb.index - chat_wnds.tb.indexes[chat_wnds.tb.row];
+                        }
+
+                        cursor.y = global_axis.wnd_y+chat_axis.tb_y+1+chat_wnds.tb.row;
+                        cursor.x = global_axis.wnd_x+chat_axis.tb_x+1+chat_wnds.tb.col;
+
+                        move(cursor.y, cursor.x);
+                        // }
+
+                        mvwprintw(global_wnds.wnd, 0, 0, "i:%d:r:%d:c:%d:ci:%d:cl:%d:sl:%d:s:%d:rs:%d:mc:%d",
+                                                            chat_wnds.tb.index,
+                                                            chat_wnds.tb.row,
+                                                            chat_wnds.tb.col,
+                                                            chat_wnds.tb.indexes[chat_wnds.tb.row],
+                                                            chat_wnds.tb.cols[chat_wnds.tb.row],
+                                                            chat_wnds.tb.syms_left[chat_wnds.tb.row],
+                                                            chat_wnds.tb.str.str_len,
+                                                            chat_wnds.tb.rows,
+                                                            chat_wnds.tb.max_col);
+                        wclear(chat_wnds.pads[0]);
+                        mvwprintw(chat_wnds.pads[0], 0, 0, "%s", chat_wnds.tb.str.text);
+                        _update_window();
+                    }
+                        break;
                 }
             }
                 break;
